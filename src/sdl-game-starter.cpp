@@ -18,9 +18,9 @@ void init_sdl(int width, int height) {
 
     // Create Window
     window = SDL_CreateWindow(
-        "Click somewhere",
+        "Game",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        width, height, SDL_WINDOW_SHOWN);
+        width, height, SDL_WINDOW_RESIZABLE);
 
     if(window == NULL) {
         printf("Window could not be created - SDL_Error: %s\n", SDL_GetError());
@@ -36,32 +36,47 @@ void init_sdl(int width, int height) {
     }
 }
 
-bool handle_input() {
+bool handle_event(SDL_Event* e)
+{
 
-    SDL_Event e;
-    bool quit = false;
+    switch(e->type)
+    {
+        case SDL_QUIT:
+            return true;
 
-    while (SDL_PollEvent(&e) != 0) {
-        if (e.type == SDL_QUIT) {
-            quit = true;
-        }
+        case SDL_WINDOWEVENT:
+        {
+            switch(e->window.event)
+            {
+                case SDL_WINDOWEVENT_RESIZED:
+                {
+                    printf("SDL_WINDOWEVENT_RESIZED (%d, %d)\n", e->window.data1, e->window.data2);
+                    break;
+                }
+            }
+        } break;
     }
-    return quit;
+    return false;
 }
 
 
-int main( int argc, char* args[] ) {
+int main(int argc, char* args[])
+{
 
     init_sdl(800, 600);
     
+    SDL_Event e;
     bool quit = false;
+
     while(!quit) {
 
         SDL_SetRenderDrawColor(renderer, 0x30, 0x00, 0x30, 0xFF);
         SDL_RenderClear(renderer);
         SDL_RenderPresent(renderer);
 
-        quit = handle_input();
+        while (SDL_PollEvent(&e) != 0) {
+            quit = handle_event(&e);
+        }
     }
 
     SDL_DestroyWindow(window);
