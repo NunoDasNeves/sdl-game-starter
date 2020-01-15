@@ -7,11 +7,15 @@
 
 #include<stdio.h>
 #include<stdlib.h>
+#include<stdint.h>
+#include<assert.h>
 
 #ifdef CONSOLE_DEBUG
 #define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG_ASSERT(E) assert(E)
 #else
 #define DEBUG_PRINTF(...)
+#define DEBUG_ASSERT(E)
 #endif
 
 #define FATAL_PRINTF(...)               \
@@ -19,7 +23,7 @@
     {                                   \
         fprintf(stderr, __VA_ARGS__);   \
         exit(1);                        \
-    } while(false)                      \
+    } while(false)
 
 /*
 #define SDL_TRY_CALL(f, ...)            \
@@ -29,7 +33,7 @@
         {                               \
             FATAL_PRINTF("SDL Error: %s\n", SDL_GetError());
         }                       \
-    } while(false)              \
+    } while(false)
 */
 
 static bool running;
@@ -39,7 +43,43 @@ static SDL_Renderer* renderer = NULL;
 static SDL_Texture* texture = NULL;
 static void* pixels = NULL;
 static int tex_width;
+static int tex_height;
 static const int BYTES_PER_PIXEL = 4;
+
+static void update_texture()
+{
+    DEBUG_ASSERT(texture);
+    DEBUG_ASSERT(pixels);
+
+    int pitch = tex_width*BYTES_PER_PIXEL;
+    uint8_t* row = (uint8_t*)pixels;
+    for (int r = 0; r < tex_height; ++r)
+    {
+        uint8_t * byte = row;
+        for (int c = 0; c < tex_width; ++c)
+        {
+            // little endian
+            // B
+            *byte = (uint8_t)c;
+            byte++;
+
+            // G
+            *byte = (uint8_t)r;
+            byte++;
+
+            // R
+            *byte = 0x00;
+            byte++;
+
+            // padding byte
+            //*byte = 0x00;
+            byte++;
+        }
+        row += pitch;
+    }
+
+    SDL_UpdateTexture(texture, NULL, pixels, tex_width * BYTES_PER_PIXEL);
+}
 
 static void create_texture(int width, int height)
 {
@@ -61,6 +101,7 @@ static void create_texture(int width, int height)
         FATAL_PRINTF("Couldn't allocate pixels buffer");
     }
     tex_width = width;
+    tex_height = height;
 }
 
 static void free_texture()
@@ -142,10 +183,7 @@ int main(int argc, char* args[])
         SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
         SDL_RenderClear(renderer);
 
-        if (SDL_UpdateTexture(texture, NULL, pixels, tex_width * BYTES_PER_PIXEL))
-        {
-            FATAL_PRINTF("Could not update texture - SDL_Error: %s\n", SDL_GetError());
-        }
+        update_texture();
         SDL_RenderCopy(renderer, texture, NULL, NULL);
 
         SDL_RenderPresent(renderer);
