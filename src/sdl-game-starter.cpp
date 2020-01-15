@@ -46,9 +46,8 @@ static int tex_width;
 static int tex_height;
 static const int BYTES_PER_PIXEL = 4;
 
-static void update_texture()
+static void render_gradient(int offset)
 {
-    DEBUG_ASSERT(texture);
     DEBUG_ASSERT(pixels);
 
     int pitch = tex_width*BYTES_PER_PIXEL;
@@ -60,11 +59,11 @@ static void update_texture()
         {
             // little endian
             // B
-            *byte = (uint8_t)c;
+            *byte = (uint8_t)(c + offset);
             byte++;
 
             // G
-            *byte = (uint8_t)r;
+            *byte = (uint8_t)(r + offset);
             byte++;
 
             // R
@@ -77,6 +76,11 @@ static void update_texture()
         }
         row += pitch;
     }
+}
+
+static void update_texture()
+{
+    DEBUG_ASSERT(texture);    
 
     SDL_UpdateTexture(texture, NULL, pixels, tex_width * BYTES_PER_PIXEL);
 }
@@ -176,6 +180,7 @@ int main(int argc, char* args[])
     // Loop
     running = true;
     SDL_Event e;
+    int offset = 0;
 
     while(running)
     {
@@ -183,6 +188,7 @@ int main(int argc, char* args[])
         SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
         SDL_RenderClear(renderer);
 
+        render_gradient(offset++);
         update_texture();
         SDL_RenderCopy(renderer, texture, NULL, NULL);
 
