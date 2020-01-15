@@ -1,0 +1,5 @@
+setup
+build
+*.exe
+*.dll
+.vscode
