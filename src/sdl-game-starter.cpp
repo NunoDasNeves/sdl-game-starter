@@ -7,12 +7,18 @@
 
 #include<stdio.h>
 
+#ifdef CONSOLE_DEBUG
+#define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
+#else
+#define DEBUG_PRINTF(...)
+#endif
+
 SDL_Window * window = NULL;
 SDL_Renderer * renderer = NULL;
 
 void init_sdl(int width, int height) {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-        printf("SDL couldn't be initialized - SDL_Error: %s\n", SDL_GetError());
+        DEBUG_PRINTF("SDL couldn't be initialized - SDL_Error: %s\n", SDL_GetError());
         exit(1);
     }
 
@@ -23,7 +29,7 @@ void init_sdl(int width, int height) {
         width, height, SDL_WINDOW_RESIZABLE);
 
     if(window == NULL) {
-        printf("Window could not be created - SDL_Error: %s\n", SDL_GetError());
+        DEBUG_PRINTF("Window could not be created - SDL_Error: %s\n", SDL_GetError());
         exit(1);
     }
 
@@ -31,7 +37,7 @@ void init_sdl(int width, int height) {
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
     if(renderer == NULL) {
-        printf("Renderer could not be created - SDL_Error: %s\n", SDL_GetError());
+        DEBUG_PRINTF("Renderer could not be created - SDL_Error: %s\n", SDL_GetError());
         exit(1);
     }
 }
@@ -48,9 +54,9 @@ bool handle_event(SDL_Event* e)
         {
             switch(e->window.event)
             {
-                case SDL_WINDOWEVENT_RESIZED:
+                case SDL_WINDOWEVENT_SIZE_CHANGED:
                 {
-                    printf("SDL_WINDOWEVENT_RESIZED (%d, %d)\n", e->window.data1, e->window.data2);
+                    DEBUG_PRINTF("SDL_WINDOWEVENT_RESIZED (%d, %d)\n", e->window.data1, e->window.data2);
                     break;
                 }
             }

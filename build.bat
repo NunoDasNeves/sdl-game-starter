@@ -3,6 +3,9 @@
 
 set SDL_DIR=C:\SDL2-2.0.10
 
+:: Debug messages etc
+set ADDITIONAL_FLAGS=/DCONSOLE_DEBUG
+
 :: Disabled warnings
 :: /wd4100  unreferenced formal parameter
 ::
@@ -32,6 +35,6 @@ cd build
 IF NOT EXIST SDL2.dll copy %SDL_DIR%\lib\x64\SDL2.dll .
 
 :: Build the thing!
-cl ..\src\sdl-game-starter.cpp %COMPILER_FLAGS% %DISABLED_WARNINGS% /link %LINKER_FLAGS%
+cl ..\src\sdl-game-starter.cpp %COMPILER_FLAGS% %DISABLED_WARNINGS% %ADDITIONAL_FLAGS% /link %LINKER_FLAGS%
 
 cd ..
