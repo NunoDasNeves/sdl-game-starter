@@ -50,27 +50,37 @@
 #define LARGE_FREE(X,Y) munmap(X, Y)
 #endif
 
+struct sdl_offscreen_buffer
+{
+    SDL_Texture* texture;
+    void* pixels;
+    int width;
+    int height;
+    int pitch;
+};
 
 static bool running;
 
 static SDL_Window* window = NULL;
 static SDL_Renderer* renderer = NULL;
-static SDL_Texture* texture = NULL;
-static void* pixels = NULL;
-static int tex_width;
-static int tex_height;
 static const int BYTES_PER_PIXEL = 4;
 
-static void render_gradient(int offset)
-{
-    DEBUG_ASSERT(pixels);
+static sdl_offscreen_buffer screen_buffer;
 
-    int pitch = tex_width*BYTES_PER_PIXEL;
-    uint8_t* row = (uint8_t*)pixels;
-    for (int r = 0; r < tex_height; ++r)
+
+static void render_gradient_to_buffer(sdl_offscreen_buffer* buffer, int offset)
+{
+    DEBUG_ASSERT(buffer->pixels);
+
+    int width = buffer->width;
+    int height = buffer->height;
+    int pitch = buffer->pitch;
+    uint8_t* row = (uint8_t*)buffer->pixels;
+
+    for (int r = 0; r < height; ++r)
     {
         uint8_t * byte = row;
-        for (int c = 0; c < tex_width; ++c)
+        for (int c = 0; c < width; ++c)
         {
             // little endian
             // B
@@ -93,45 +103,53 @@ static void render_gradient(int offset)
     }
 }
 
-static void update_texture()
+static void render_offscreen_buffer(sdl_offscreen_buffer* buffer)
 {
-    DEBUG_ASSERT(texture);    
+    DEBUG_ASSERT(buffer->texture);
 
-    SDL_UpdateTexture(texture, NULL, pixels, tex_width * BYTES_PER_PIXEL);
+    SDL_UpdateTexture(buffer->texture, NULL, buffer->pixels, buffer->pitch);
+    // this will stretch the texture to the render target if necessary, using bilinear interpolation
+    SDL_RenderCopy(renderer, buffer->texture, NULL, NULL);
 }
 
-static void create_texture(int width, int height)
+static sdl_offscreen_buffer create_offscreen_buffer(int width, int height)
 {
-    texture = SDL_CreateTexture(
+    sdl_offscreen_buffer buffer{};
+
+    buffer.pitch = width * BYTES_PER_PIXEL;
+    buffer.width = width;
+    buffer.height = height;
+
+    buffer.texture = SDL_CreateTexture(
         renderer,
         SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING,
         width,
         height);
 
-    if(texture == NULL)
+    if(buffer.texture == NULL)
     {
         FATAL_PRINTF("Window could not be created - SDL_Error: %s\n", SDL_GetError());
     }
 
-    pixels = LARGE_ALLOC(width * height * BYTES_PER_PIXEL);
-    if(pixels == NULL)
+    buffer.pixels = LARGE_ALLOC(height * buffer.pitch);
+    if(buffer.pixels == NULL)
     {
         FATAL_PRINTF("Couldn't allocate pixels buffer");
     }
-    tex_width = width;
-    tex_height = height;
+
+    return buffer;
 }
 
-static void free_texture()
+static void free_offscreen_buffer(sdl_offscreen_buffer* buffer)
 {
-    if (texture)
+    if (buffer->texture)
     {
-        SDL_DestroyTexture(texture);
+        SDL_DestroyTexture(buffer->texture);
     }
-    if (pixels)
+    if (buffer->pixels)
     {
-        LARGE_FREE(pixels, tex_width * tex_height * BYTES_PER_PIXEL);
+        LARGE_FREE(buffer->pixels, buffer->height * buffer->pitch);
     }
 }
 
@@ -149,8 +167,9 @@ static void handle_event(SDL_Event* e)
                 case SDL_WINDOWEVENT_SIZE_CHANGED:
                 {
                     DEBUG_PRINTF("Resizing window (%d, %d)\n", e->window.data1, e->window.data2);
-                    free_texture();
-                    create_texture(e->window.data1, e->window.data2);
+                    // comment out to stretch to window size
+                    //free_offscreen_buffer(&screen_buffer);
+                    //screen_buffer = create_offscreen_buffer(e->window.data1, e->window.data2);
                     break;
                 }
             }
@@ -190,7 +209,7 @@ int main(int argc, char* args[])
         FATAL_PRINTF("Renderer could not be created - SDL_Error: %s\n", SDL_GetError());
     }
 
-    create_texture(width, height);
+    screen_buffer = create_offscreen_buffer(width, height);
 
     // Loop
     running = true;
@@ -203,9 +222,8 @@ int main(int argc, char* args[])
         SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
         SDL_RenderClear(renderer);
 
-        render_gradient(offset++);
-        update_texture();
-        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        render_gradient_to_buffer(&screen_buffer, offset++);
+        render_offscreen_buffer(&screen_buffer);
 
         SDL_RenderPresent(renderer);
 
