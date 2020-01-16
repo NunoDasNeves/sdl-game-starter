@@ -59,20 +59,38 @@ struct sdl_offscreen_buffer
     int pitch;
 };
 
+struct GameKeyboardState
+{
+    bool up;
+    bool down;
+    bool left;
+    bool right;
+};
+
 static bool running;
 
+// Rendering stuff
 static SDL_Window* window = NULL;
 static SDL_Renderer* renderer = NULL;
 static const int BYTES_PER_PIXEL = 4;
 
 static sdl_offscreen_buffer screen_buffer;
 
-#define MAX_CONTROLLERS 1
+// Input stuff
+#define MAX_CONTROLLERS 4
 static int num_controllers = 0;
 static SDL_GameController* controller_handles[MAX_CONTROLLERS];
 
+static GameKeyboardState game_keyboard_state{};
 
-static void render_gradient_to_buffer(sdl_offscreen_buffer* buffer, int offset)
+
+int clamp(int val, int lo, int hi) {
+    if (val < lo) return lo;
+    if (val > hi) return hi;
+    return val;
+}
+
+static void render_gradient_to_buffer(sdl_offscreen_buffer* buffer, int x_offset, int y_offset)
 {
     DEBUG_ASSERT(buffer->pixels);
 
@@ -88,11 +106,11 @@ static void render_gradient_to_buffer(sdl_offscreen_buffer* buffer, int offset)
         {
             // little endian
             // B
-            *byte = (uint8_t)(c + offset);
+            *byte = (uint8_t)(c + x_offset);
             byte++;
 
             // G
-            *byte = (uint8_t)(r + offset);
+            *byte = (uint8_t)(r + y_offset);
             byte++;
 
             // R
@@ -172,6 +190,8 @@ static void add_controller(int joystick_index) {
 
 static void handle_event(SDL_Event* e)
 {
+    bool key_down = false;
+
     switch(e->type)
     {
         case SDL_QUIT:
@@ -196,6 +216,39 @@ static void handle_event(SDL_Event* e)
             add_controller(e->cdevice.which);
         }
         // TODO remove controller
+        // TODO support text input as per: https://wiki.libsdl.org/Tutorials/TextInput
+        case SDL_KEYDOWN:
+            key_down = true;
+        case SDL_KEYUP:
+        {
+            SDL_Keycode keycode = e->key.keysym.sym;
+            switch(keycode)
+            {
+                case SDLK_LEFT:
+                case SDLK_a:
+                    game_keyboard_state.left = key_down;
+                    break;
+                case SDLK_UP:
+                case SDLK_w:
+                    game_keyboard_state.up = key_down;
+                    break;
+                case SDLK_RIGHT:
+                case SDLK_d:
+                    game_keyboard_state.right = key_down;
+                    break;
+                case SDLK_DOWN:
+                case SDLK_s:
+                    game_keyboard_state.down = key_down;
+                    break;
+            }
+            /*
+            DEBUG_PRINTF("up: %s\n", game_keyboard_state.up ? "DOWN" : "UP");
+            DEBUG_PRINTF("down: %s\n", game_keyboard_state.down ? "DOWN" : "UP");
+            DEBUG_PRINTF("left: %s\n", game_keyboard_state.left ? "DOWN" : "UP");
+            DEBUG_PRINTF("right: %s\n", game_keyboard_state.right ? "DOWN" : "UP");
+            */
+            break;
+        }
     }
 }
 
@@ -276,28 +329,48 @@ int main(int argc, char* args[])
     // Loop
     running = true;
     SDL_Event e;
-    int offset = 0;
     int16_t stick_x = 0;
     int16_t stick_y = 0;
+    int x_offset = 0;
+    int y_offset = 0;
+    int x_vel = 0;
+    int y_vel = 0;
+    static const int MAX_SCROLL_SPEED = 5;
 
     while(running)
     {
-
-        SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
-        SDL_RenderClear(renderer);
-
-        render_gradient_to_buffer(&screen_buffer, offset);
-        render_offscreen_buffer(&screen_buffer);
-
-        SDL_RenderPresent(renderer);
-
+        
         while (SDL_PollEvent(&e))
         {
             handle_event(&e);
         }
 
+        x_vel = 0;
+        y_vel = 0;
+        if (game_keyboard_state.up && !game_keyboard_state.down) {
+            y_vel = -MAX_SCROLL_SPEED;
+        } else if (game_keyboard_state.down && !game_keyboard_state.up) {
+            y_vel = MAX_SCROLL_SPEED;
+        }
+        if (game_keyboard_state.left && !game_keyboard_state.right) {
+            x_vel = -MAX_SCROLL_SPEED;
+        } else if (game_keyboard_state.right && !game_keyboard_state.left) {
+            x_vel = +MAX_SCROLL_SPEED;
+        }
         poll_controllers(&stick_x, &stick_y);
-        offset += ((double)stick_x/32767.0)*10;
+        // TODO replace with Vector2; this doesn't work properly because the vector length must be clamped, not x and y individually
+        x_vel = clamp(((double)stick_x / 32767.0) * MAX_SCROLL_SPEED + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
+        y_vel = clamp(((double)stick_y / 32767.0) * MAX_SCROLL_SPEED + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
+        x_offset += x_vel;
+        y_offset += y_vel;
+
+        SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
+        SDL_RenderClear(renderer);
+
+        render_gradient_to_buffer(&screen_buffer, x_offset, y_offset);
+        render_offscreen_buffer(&screen_buffer);
+
+        SDL_RenderPresent(renderer);        
     }
 
     SDL_DestroyWindow(window);
