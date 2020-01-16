@@ -67,6 +67,10 @@ static const int BYTES_PER_PIXEL = 4;
 
 static sdl_offscreen_buffer screen_buffer;
 
+#define MAX_CONTROLLERS 4
+static int num_controllers = 0;
+static SDL_GameController* controller_handles[MAX_CONTROLLERS];
+
 
 static void render_gradient_to_buffer(sdl_offscreen_buffer* buffer, int offset)
 {
@@ -153,6 +157,19 @@ static void free_offscreen_buffer(sdl_offscreen_buffer* buffer)
     }
 }
 
+static void add_controller(int joystick_index) {
+    if (!SDL_IsGameController(joystick_index))
+    {
+        return;
+    }
+    if (num_controllers >= MAX_CONTROLLERS)
+    {
+        return;
+    }
+    controller_handles[num_controllers] = SDL_GameControllerOpen(joystick_index);
+    num_controllers++;
+}
+
 static void handle_event(SDL_Event* e)
 {
     switch(e->type)
@@ -174,9 +191,13 @@ static void handle_event(SDL_Event* e)
                 }
             }
         } break;
+        case SDL_CONTROLLERDEVICEADDED:
+        {
+            add_controller(e->cdevice.which);
+        }
+        // TODO remove controller
     }
 }
-
 
 int main(int argc, char* args[])
 {
@@ -184,7 +205,7 @@ int main(int argc, char* args[])
     int height = 600;
 
     // Init SDL
-    if (SDL_Init(SDL_INIT_VIDEO) < 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0)
     {
         FATAL_PRINTF("SDL couldn't be initialized - SDL_Error: %s\n", SDL_GetError());
     }
@@ -208,6 +229,14 @@ int main(int argc, char* args[])
     {
         FATAL_PRINTF("Renderer could not be created - SDL_Error: %s\n", SDL_GetError());
     }
+
+    // get initially plugged in controllers
+    int num_joysticks = SDL_NumJoysticks();
+    for (int joy_index = 0; joy_index < num_joysticks; ++joy_index)
+    {
+        add_controller(joy_index);
+    }
+    DEBUG_PRINTF("Found %d game controllers\n", num_controllers);
 
     screen_buffer = create_offscreen_buffer(width, height);
 
