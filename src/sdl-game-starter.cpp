@@ -83,7 +83,6 @@ static SDL_GameController* controller_handles[MAX_CONTROLLERS];
 
 static GameKeyboardState game_keyboard_state{};
 
-
 static void render_gradient_to_buffer(sdl_offscreen_buffer* buffer, int x_offset, int y_offset)
 {
     DEBUG_ASSERT(buffer->pixels);
