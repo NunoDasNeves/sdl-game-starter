@@ -67,6 +67,10 @@ static const int BYTES_PER_PIXEL = 4;
 
 static sdl_offscreen_buffer screen_buffer;
 
+#define MAX_CONTROLLERS 1
+static int num_controllers = 0;
+static SDL_GameController* controller_handles[MAX_CONTROLLERS];
+
 
 static void render_gradient_to_buffer(sdl_offscreen_buffer* buffer, int offset)
 {
@@ -153,6 +157,19 @@ static void free_offscreen_buffer(sdl_offscreen_buffer* buffer)
     }
 }
 
+static void add_controller(int joystick_index) {
+    if (!SDL_IsGameController(joystick_index))
+    {
+        return;
+    }
+    if (num_controllers >= MAX_CONTROLLERS)
+    {
+        return;
+    }
+    controller_handles[num_controllers] = SDL_GameControllerOpen(joystick_index);
+    num_controllers++;
+}
+
 static void handle_event(SDL_Event* e)
 {
     switch(e->type)
@@ -174,9 +191,46 @@ static void handle_event(SDL_Event* e)
                 }
             }
         } break;
+        case SDL_CONTROLLERDEVICEADDED:
+        {
+            add_controller(e->cdevice.which);
+        }
+        // TODO remove controller
     }
 }
 
+static const int deadzone_left = 5000;
+static void poll_controllers(int16_t* stick_x, int16_t* stick_y)
+{
+    // TODO: store this or something
+    for (int i = 0; i < MAX_CONTROLLERS; ++i)
+    {
+        if(controller_handles[i] != NULL && SDL_GameControllerGetAttached(controller_handles[i]))
+        {
+            bool up = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_UP);
+            bool down = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+            bool left = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+            bool right = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+            bool start = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_START);
+            bool back = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_BACK);
+            bool leftShoulder = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+            bool rightShoulder = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+            bool a_button = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_A);
+            bool b_button = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_B);
+            bool x_button = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_X);
+            bool y_button = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_Y);
+
+            *stick_x = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_LEFTX);
+            *stick_y = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_LEFTY);
+            *stick_x = abs(*stick_x) < deadzone_left ? 0 : *stick_x;
+            *stick_y = abs(*stick_y) < deadzone_left ? 0 : *stick_y;
+        }
+        else
+        {
+            // TODO: controller is not plugged in
+        }
+    }
+}
 
 int main(int argc, char* args[])
 {
@@ -184,7 +238,7 @@ int main(int argc, char* args[])
     int height = 600;
 
     // Init SDL
-    if (SDL_Init(SDL_INIT_VIDEO) < 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0)
     {
         FATAL_PRINTF("SDL couldn't be initialized - SDL_Error: %s\n", SDL_GetError());
     }
@@ -209,12 +263,22 @@ int main(int argc, char* args[])
         FATAL_PRINTF("Renderer could not be created - SDL_Error: %s\n", SDL_GetError());
     }
 
+    // get initially plugged in controllers
+    int num_joysticks = SDL_NumJoysticks();
+    for (int joy_index = 0; joy_index < num_joysticks; ++joy_index)
+    {
+        add_controller(joy_index);
+    }
+    DEBUG_PRINTF("Found %d game controllers\n", num_controllers);
+
     screen_buffer = create_offscreen_buffer(width, height);
 
     // Loop
     running = true;
     SDL_Event e;
     int offset = 0;
+    int16_t stick_x = 0;
+    int16_t stick_y = 0;
 
     while(running)
     {
@@ -222,7 +286,7 @@ int main(int argc, char* args[])
         SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
         SDL_RenderClear(renderer);
 
-        render_gradient_to_buffer(&screen_buffer, offset++);
+        render_gradient_to_buffer(&screen_buffer, offset);
         render_offscreen_buffer(&screen_buffer);
 
         SDL_RenderPresent(renderer);
@@ -231,6 +295,9 @@ int main(int argc, char* args[])
         {
             handle_event(&e);
         }
+
+        poll_controllers(&stick_x, &stick_y);
+        offset += ((double)stick_x/32767.0)*10;
     }
 
     SDL_DestroyWindow(window);
