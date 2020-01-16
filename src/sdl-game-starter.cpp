@@ -1,8 +1,11 @@
 #ifdef _WIN32
+#include<windows.h>
 #include<SDL.h>
+#include<memoryapi.h>
 #endif
 #ifdef __linux__
 #include<SDL2/SDL.h>
+#include<sys/mman.h>
 #endif
 
 #include<stdio.h>
@@ -35,6 +38,18 @@
         }                       \
     } while(false)
 */
+
+// large alloc and free
+#ifdef _WIN32
+#define LARGE_ALLOC(X) VirtualAlloc(NULL, X, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
+#define LARGE_FREE(X,Y) DEBUG_ASSERT(VirtualFree(X, 0, MEM_RELEASE))
+#endif
+#ifdef __linux__
+// NOT TESTED
+#define LARGE_ALLOC(X) mmap(NULL, X, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0)
+#define LARGE_FREE(X,Y) munmap(X, Y)
+#endif
+
 
 static bool running;
 
@@ -99,7 +114,7 @@ static void create_texture(int width, int height)
         FATAL_PRINTF("Window could not be created - SDL_Error: %s\n", SDL_GetError());
     }
 
-    pixels = malloc(width * height * BYTES_PER_PIXEL);
+    pixels = LARGE_ALLOC(width * height * BYTES_PER_PIXEL);
     if(pixels == NULL)
     {
         FATAL_PRINTF("Couldn't allocate pixels buffer");
@@ -116,7 +131,7 @@ static void free_texture()
     }
     if (pixels)
     {
-        free(pixels);
+        LARGE_FREE(pixels, tex_width * tex_height * BYTES_PER_PIXEL);
     }
 }
 
