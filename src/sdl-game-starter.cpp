@@ -76,6 +76,10 @@ static const int BYTES_PER_PIXEL = 4;
 
 static sdl_offscreen_buffer screen_buffer;
 
+// Audio stuff
+SDL_AudioDeviceID audio_device_id = 0;
+SDL_AudioSpec audio_settings;
+
 // Input stuff
 #define MAX_CONTROLLERS 4
 static int num_controllers = 0;
@@ -285,13 +289,19 @@ static void poll_controllers(int16_t* stick_x, int16_t* stick_y)
     }
 }
 
+static void audio_callback(void* user_data, Uint8* audio_data, int length)
+{
+    // Clear our audio buffer to silence.
+    memset(audio_data, audio_settings.silence, length);
+}
+
 int main(int argc, char* args[])
 {
     int width = 800;
     int height = 600;
 
     // Init SDL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_AUDIO) < 0)
     {
         FATAL_PRINTF("SDL couldn't be initialized - SDL_Error: %s\n", SDL_GetError());
     }
@@ -316,7 +326,7 @@ int main(int argc, char* args[])
         FATAL_PRINTF("Renderer could not be created - SDL_Error: %s\n", SDL_GetError());
     }
 
-    // get initially plugged in controllers
+    // Get initially plugged in controllers
     int num_joysticks = SDL_NumJoysticks();
     for (int joy_index = 0; joy_index < num_joysticks; ++joy_index)
     {
@@ -324,7 +334,42 @@ int main(int argc, char* args[])
     }
     DEBUG_PRINTF("Found %d game controllers\n", num_controllers);
 
+    // Initialize rendering buffer
     screen_buffer = create_offscreen_buffer(width, height);
+
+    // Initialize audio
+
+    // TODO store the name of the device for debugging and/or settings menu stuff (must be copied)
+    // WARNING I don't think this index always equals the audio device id, because devices can change at runtime
+    int num_audio_devices = SDL_GetNumAudioDevices(0); // iscapture = 0
+    DEBUG_PRINTF("Audio devices:\n");
+    for (int i = 0; i < num_audio_devices; ++i)
+    {
+        DEBUG_PRINTF("  %d: %s\n", i, SDL_GetAudioDeviceName(i, 0));
+    }
+
+    SDL_AudioSpec actual_settings{};
+
+    audio_settings.freq = 48000;
+    audio_settings.format = AUDIO_S16LSB;
+    audio_settings.channels = 2;
+    audio_settings.samples = 4096; // 4096/60 = ~68 samples per frame
+    audio_settings.callback = audio_callback;
+
+    // find a suitable device, no changes in format allowed
+    // TODO make selectable and automatically change at runtime by listening for SDL_AudioDeviceEvent
+    audio_device_id = SDL_OpenAudioDevice(NULL, 0, &audio_settings, &actual_settings, 0);
+    if (audio_device_id == 0) {
+        FATAL_PRINTF("Failed to open audio - SDL_Error: %s\n", SDL_GetError());
+    }
+    if (actual_settings.format != AUDIO_S16LSB || actual_settings.freq != 48000 || actual_settings.samples != 4096) {
+        FATAL_PRINTF("Audio settings don't match requested\n");
+    }
+    DEBUG_PRINTF("Audio device selected: %d\n", audio_device_id);
+    audio_settings = actual_settings;
+    SDL_PauseAudioDevice(audio_device_id, 0); /* start audio playing. */
+    DEBUG_PRINTF("Audio silence: %d\n", audio_settings.silence);
+    DEBUG_PRINTF("Audio buffer size: %d\n", audio_settings.size);
 
     // Loop
     running = true;
@@ -373,6 +418,7 @@ int main(int argc, char* args[])
         SDL_RenderPresent(renderer);        
     }
 
+    SDL_CloseAudioDevice(audio_device_id);
     SDL_DestroyWindow(window);
     SDL_Quit();
 
