@@ -245,13 +245,19 @@ static void handle_event(SDL_Event* e)
     }
 }
 
+static void audio_callback(void* user_data, Uint8* audio_data, int length)
+{
+    // Clear our audio buffer to silence.
+    memset(audio_data, 0, length);
+}
+
 int main(int argc, char* args[])
 {
     int width = 800;
     int height = 600;
 
     // Init SDL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_AUDIO) < 0)
     {
         FATAL_PRINTF("SDL couldn't be initialized - SDL_Error: %s\n", SDL_GetError());
     }
@@ -276,7 +282,7 @@ int main(int argc, char* args[])
         FATAL_PRINTF("Renderer could not be created - SDL_Error: %s\n", SDL_GetError());
     }
 
-    // get initially plugged in controllers
+    // Get initially plugged in controllers
     int num_joysticks = SDL_NumJoysticks();
     for (int joy_index = 0; joy_index < num_joysticks; ++joy_index)
     {
@@ -284,7 +290,21 @@ int main(int argc, char* args[])
     }
     DEBUG_PRINTF("Found %d game controllers\n", num_controllers);
 
+    // Initialize rendering buffer
     screen_buffer = create_offscreen_buffer(width, height);
+
+    // Initialize audio
+    SDL_AudioSpec audio_settings = {0};
+    audio_settings.freq = audio_samples_per_second;
+    audio_settings.format = AUDIO_S16LE;
+    audio_settings.channels = 2;
+    audio_settings.samples = audio_buffer_size;
+    audio_settings.callback = &audio_callback;
+    SDL_OpenAudio(&audio_settings, 0);
+    if (audio_settings.format != AUDIO_S16LE)
+    {
+        FATAL_PRINTF("SDL_Open audio returned wrong format\n");
+    }
 
     // Loop
     running = true;
