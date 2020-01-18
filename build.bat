@@ -8,8 +8,8 @@ set ADDITIONAL_FLAGS=/DCONSOLE_DEBUG
 
 :: Disabled warnings
 :: /wd4100  unreferenced formal parameter
-::
-set DISABLED_WARNINGS=/wd4100
+:: /wd4189  local variable is initialized but not referenced
+set DISABLED_WARNINGS=/wd4100 /wd4189
 
 :: Compiler flags
 :: /Oi		compiler intrinsics

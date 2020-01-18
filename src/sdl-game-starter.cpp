@@ -359,8 +359,8 @@ int main(int argc, char* args[])
         }
         poll_controllers(&stick_x, &stick_y);
         // TODO replace with Vector2; this doesn't work properly because the vector length must be clamped, not x and y individually
-        x_vel = clamp(((double)stick_x / 32767.0) * MAX_SCROLL_SPEED + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
-        y_vel = clamp(((double)stick_y / 32767.0) * MAX_SCROLL_SPEED + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
+        x_vel = clamp((int)(((double)stick_x / 32767.0) * (double)MAX_SCROLL_SPEED) + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
+        y_vel = clamp((int)(((double)stick_y / 32767.0) * (double)MAX_SCROLL_SPEED) + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
         x_offset += x_vel;
         y_offset += y_vel;
 
