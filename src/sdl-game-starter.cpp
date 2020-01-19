@@ -97,6 +97,8 @@ static const int AUDIO_FREQ = 48000;
 static const int NUM_AUDIO_CHANNELS = 2;
 static const int AUDIO_SAMPLE_SIZE = (AUDIO_S16SYS & SDL_AUDIO_MASK_BITSIZE)/8; //in bytes
 static const int BYTES_PER_AUDIO_SAMPLE = AUDIO_SAMPLE_SIZE * NUM_AUDIO_CHANNELS;
+static const int MIDDLE_C_FREQ = 256;
+static const int MIDDLE_VOLUME_AMPLITUDE = 500;
 
 // Input stuff
 #define MAX_CONTROLLERS 4
@@ -480,10 +482,9 @@ int main(int argc, char* args[])
     // 2 seconds of samples
     const int num_samples_in_ring_buffer = audio_settings.freq * 2;
 
-    // audio stuff for square wave
     int wave_offset = 0;
-    int16_t wave_amplitude = 500;
-    int wave_hz = 256;
+    int16_t wave_amplitude = MIDDLE_VOLUME_AMPLITUDE;
+    int wave_hz = MIDDLE_C_FREQ;
 
     // Lock the callback
     SDL_LockAudioDevice(audio_device_id);
@@ -530,6 +531,10 @@ int main(int argc, char* args[])
     int y_vel = 0;
     const int MAX_SCROLL_SPEED = 5;
 
+    // audio stuff
+    const int MAX_FREQ_OFFSET = 50;
+    const int MAX_VOLUME_OFFSET = 300;
+
     while(running)
     {
         
@@ -556,6 +561,9 @@ int main(int argc, char* args[])
         y_vel = clamp((int)(((double)stick_y / 32767.0) * (double)MAX_SCROLL_SPEED) + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
         x_offset += x_vel;
         y_offset += y_vel;
+        // change freq & volume of wave
+        wave_hz = MIDDLE_C_FREQ + (int16_t)((double)MAX_FREQ_OFFSET * (double)stick_y / 32767.0);
+        wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((double)MAX_VOLUME_OFFSET * (double)stick_x / 32767.0);
 
         SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
         SDL_RenderClear(renderer);
