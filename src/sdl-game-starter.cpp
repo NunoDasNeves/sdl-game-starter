@@ -14,6 +14,7 @@
 #include<assert.h>
 #include<limits.h>
 #include<assert.h>
+#include<math.h>
 
 #ifdef CONSOLE_DEBUG
 #define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
@@ -328,6 +329,40 @@ static void audio_callback(void* user_data, uint8_t* audio_data, int length)
     }
 }
 
+// return the modified new wave offset
+static int audio_sine_wave(
+    // buffer size in bytes; must be a multiple of sample size
+    void * buffer, int buffer_size,
+    // TODO allow audio channels to have different amplitudes/offsets... etc
+    int16_t amplitude,
+    // period and offset are in number of samples
+    int wave_hz, int wave_offset)
+{
+    DEBUG_ASSERT(buffer_size % BYTES_PER_AUDIO_SAMPLE == 0);
+    // how many samples per full wave
+    int wave_period = AUDIO_FREQ / wave_hz;
+    // frequency as a float, to stretch the wave out to the correct period
+    double real_freq = 1.0 / (double)wave_period;
+    // multiply by 2*PI so the base period is 1.0, then multiply by the period we want
+    double offset_coefficient = 2.0 * M_PI * real_freq;
+    int num_samples = buffer_size / BYTES_PER_AUDIO_SAMPLE;
+
+    int16_t* curr_sample = (int16_t*)buffer;
+
+    for (int i = 0; i < num_samples; ++i) {
+
+        for (int ch = 0; ch < NUM_AUDIO_CHANNELS; ++ch)
+        {
+            *curr_sample = (int16_t)((double)amplitude * sin(offset_coefficient * (double)wave_offset));
+            curr_sample++;
+        }
+
+        wave_offset = (wave_offset + 1) % wave_period;
+    }
+
+    return wave_offset;
+}
+
 
 // return the modified new wave offset
 static int audio_square_wave(
@@ -335,10 +370,17 @@ static int audio_square_wave(
     void * buffer, int buffer_size,
     // TODO allow audio channels to have different amplitudes/offsets... etc
     int16_t amplitude,
-    // period and offset are in number of samples
-    int wave_period, int wave_offset)
+    // hz and offset are in number of samples
+    int wave_hz, int wave_offset)
 {
     DEBUG_ASSERT(buffer_size % BYTES_PER_AUDIO_SAMPLE == 0);
+
+    // so this is samples_per_second * period, i.e. it's the period (1/wave_hz) in number of samples
+    int wave_period = AUDIO_FREQ / wave_hz;
+    // make it even
+    wave_period = wave_period % 2 ? wave_period - 1 : wave_period;
+    // make sure it's not 0
+    wave_period = max(2, wave_period);
     int half_wave_period = wave_period / 2;
     int num_samples = buffer_size / BYTES_PER_AUDIO_SAMPLE;
 
@@ -348,7 +390,7 @@ static int audio_square_wave(
 
         for (int ch = 0; ch < NUM_AUDIO_CHANNELS; ++ch)
         {
-            *curr_sample = wave_offset >= half_wave_period ? -amplitude : amplitude;;
+            *curr_sample = wave_offset >= half_wave_period ? -amplitude : amplitude;
             curr_sample++;
         }
 
@@ -440,13 +482,8 @@ int main(int argc, char* args[])
 
     // audio stuff for square wave
     int wave_offset = 0;
-    int16_t wave_amplitude = 300;
-    int wave_hz = 125;
-    int wave_period = AUDIO_FREQ/wave_hz;
-    // make it even
-    wave_period = wave_period % 2 ? wave_period - 1 : wave_period;
-    // make sure it's not 0
-    wave_period = max(2, wave_period);
+    int16_t wave_amplitude = 500;
+    int wave_hz = 256;
 
     // Lock the callback
     SDL_LockAudioDevice(audio_device_id);
@@ -473,7 +510,7 @@ int main(int argc, char* args[])
         // fill ring buffer with silence
         //memset(audio_ring_buffer.data, audio_settings.silence, audio_ring_buffer.size);
         // fill ring buffer with square wave
-        wave_offset = audio_square_wave(audio_ring_buffer.data, audio_ring_buffer.size, wave_amplitude, wave_period, wave_offset);
+        wave_offset = audio_sine_wave(audio_ring_buffer.data, audio_ring_buffer.size, wave_amplitude, wave_hz, wave_offset);
 
     }
     // Unlock the callback
@@ -529,13 +566,14 @@ int main(int argc, char* args[])
         SDL_RenderPresent(renderer);
 
         // Fill next part of audio buffer with square wave, up to the play cursor
-        SDL_LockAudioDevice(audio_device_id);
-        do {
-            // need to make 1 easy assumption: we can write 2 seconds of audio faster than we can play it
-            // hence, write index is always considered ahead of play index
+        // need to make 1 easy assumption: we can write 2 seconds of audio faster than we can play it
+        // hence, write index is always considered ahead of play index
 
-            // if write_index has caught up, continue;
-            if (audio_ring_buffer.write_index == audio_ring_buffer.play_index) break;
+        // if write_index has caught up, don't write anything;
+        SDL_LockAudioDevice(audio_device_id);
+        if (audio_ring_buffer.write_index != audio_ring_buffer.play_index)
+        {
+
 
             // get region/s to fill (2 cases because of circular buffer)
             int region_size_1, region_size_2;
@@ -554,15 +592,15 @@ int main(int argc, char* args[])
 
             void* region = (void*)&((int8_t*)audio_ring_buffer.data)[audio_ring_buffer.write_index];
 
-            wave_offset = audio_square_wave(region, region_size_1, wave_amplitude, wave_period, wave_offset);
+            wave_offset = audio_sine_wave(region, region_size_1, wave_amplitude, wave_hz, wave_offset);
             if (region_size_2)
             {
-                wave_offset = audio_square_wave(audio_ring_buffer.data, region_size_2, wave_amplitude, wave_period, wave_offset);
+                wave_offset = audio_sine_wave(audio_ring_buffer.data, region_size_2, wave_amplitude, wave_hz, wave_offset);
             }
 
             audio_ring_buffer.write_index = (audio_ring_buffer.write_index + region_size_1 + region_size_2) % audio_ring_buffer.size;
 
-        } while (false);
+        }
         SDL_UnlockAudioDevice(audio_device_id);
 
     }
