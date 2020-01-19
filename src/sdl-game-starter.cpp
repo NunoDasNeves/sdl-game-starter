@@ -67,6 +67,14 @@ struct GameKeyboardState
     bool right;
 };
 
+struct AudioRingBuffer
+{
+    int size;
+    int write_index;
+    int read_index;
+    void* data;
+};
+
 static bool running;
 
 // Rendering stuff
@@ -77,8 +85,9 @@ static const int BYTES_PER_PIXEL = 4;
 static sdl_offscreen_buffer screen_buffer;
 
 // Audio stuff
-SDL_AudioDeviceID audio_device_id = 0;
-SDL_AudioSpec audio_settings;
+static SDL_AudioDeviceID audio_device_id = 0;
+static SDL_AudioSpec audio_settings;
+static AudioRingBuffer audio_ring_buffer{};
 
 // Input stuff
 #define MAX_CONTROLLERS 4
@@ -289,10 +298,26 @@ static void poll_controllers(int16_t* stick_x, int16_t* stick_y)
     }
 }
 
-static void audio_callback(void* user_data, Uint8* audio_data, int length)
+static void audio_callback(void* user_data, uint8_t* audio_data, int length)
 {
-    // Clear our audio buffer to silence.
-    memset(audio_data, audio_settings.silence, length);
+    AudioRingBuffer* ring_buffer = (AudioRingBuffer*)user_data;
+
+    // Copy length bytes from ring buffer to audio_data buffer
+    DEBUG_ASSERT(length <= ring_buffer->size);
+
+    int space_left = ring_buffer->size - ring_buffer->read_index;
+
+    if (length > space_left)
+    {
+        memcpy(audio_data, &((uint8_t*)ring_buffer->data)[ring_buffer->read_index], space_left);
+        memcpy(&audio_data[space_left], ring_buffer->data, length - space_left);
+        ring_buffer->read_index = length - space_left;
+    }
+    else
+    {
+        memcpy(audio_data, &((uint8_t*)ring_buffer->data)[ring_buffer->read_index], length);
+        ring_buffer->read_index += length;
+    }
 }
 
 int main(int argc, char* args[])
@@ -353,8 +378,9 @@ int main(int argc, char* args[])
     audio_settings.freq = 48000;
     audio_settings.format = AUDIO_S16LSB;
     audio_settings.channels = 2;
-    audio_settings.samples = 4096; // 4096/60 = ~68 samples per frame
+    audio_settings.samples = 4096;
     audio_settings.callback = audio_callback;
+    audio_settings.userdata = &audio_ring_buffer;
 
     // find a suitable device, no changes in format allowed
     // TODO make selectable and automatically change at runtime by listening for SDL_AudioDeviceEvent
@@ -367,9 +393,54 @@ int main(int argc, char* args[])
     }
     DEBUG_PRINTF("Audio device selected: %d\n", audio_device_id);
     audio_settings = actual_settings;
-    SDL_PauseAudioDevice(audio_device_id, 0); /* start audio playing. */
-    DEBUG_PRINTF("Audio silence: %d\n", audio_settings.silence);
-    DEBUG_PRINTF("Audio buffer size: %d\n", audio_settings.size);
+
+    // Lock the callback
+    SDL_LockAudioDevice(audio_device_id);
+    {
+        SDL_PauseAudioDevice(audio_device_id, 0); /* start audio playing. */
+        DEBUG_PRINTF("Audio silence: %d\n", audio_settings.silence);
+        DEBUG_PRINTF("SDL audio buffer size: %d\n", audio_settings.size);
+
+        // initialize ring buffer
+        // 2 seconds of audio, with 16 bits (2 bytes) * num_channels per sample
+        int num_samples = audio_settings.freq * 2;
+        audio_ring_buffer.size = audio_settings.channels * 2 * num_samples;
+        audio_ring_buffer.write_index = 0;
+        audio_ring_buffer.read_index = 0;
+        DEBUG_PRINTF("Audio ring buffer size: %d\n", audio_ring_buffer.size);
+
+        audio_ring_buffer.data = LARGE_ALLOC(audio_ring_buffer.size);
+        if (!audio_ring_buffer.data)
+        {
+            FATAL_PRINTF("Couldn't allocate audio ring buffer\n");
+        }
+
+        // fill ring buffer with square wave
+        // 125Hz square wave divides evenly into our buffer, and doesn't hurt ears too bad
+        // each cycle is going to be 48000/square_wave_hz samples long
+        int16_t sample_level = 500;
+        int sample_counter = 0;
+        int sample_hz = 125;
+        const int samples_per_wave = audio_settings.freq/sample_hz;
+
+        for (int i = 0; i < num_samples * audio_settings.channels; i += audio_settings.channels) {
+            int16_t* left_sample = &((int16_t*)audio_ring_buffer.data)[i];
+            int16_t* right_sample = &((int16_t*)audio_ring_buffer.data)[i+1];
+
+            *left_sample = sample_level;
+            *right_sample = sample_level;
+
+            sample_counter++;
+            if (sample_counter >= samples_per_wave/2) {
+                sample_level = -sample_level;
+                sample_counter = 0;
+            }
+        }
+
+    }
+    // Unlock the callback
+    SDL_UnlockAudioDevice(audio_device_id);
+
 
     // Loop
     running = true;
