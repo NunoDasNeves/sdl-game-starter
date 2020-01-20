@@ -90,15 +90,22 @@ static const int BYTES_PER_PIXEL = 4;
 static sdl_offscreen_buffer screen_buffer;
 
 // Audio stuff
-static SDL_AudioDeviceID audio_device_id = 0;
-static SDL_AudioSpec audio_settings;
-static AudioRingBuffer audio_ring_buffer{};
-static const int AUDIO_FREQ = 48000;
+static const int AUDIO_SAMPLES_PER_SECOND = 48000;
+static const int SDL_AUDIO_BUFFER_SAMPLES = 512;
+static const int AUDIO_RING_BUFFER_NUM_SAMPLES = AUDIO_SAMPLES_PER_SECOND;
+static const int AUDIO_LATENCY_SAMPLE_COUNT = AUDIO_SAMPLES_PER_SECOND / 15;
 static const int NUM_AUDIO_CHANNELS = 2;
 static const int AUDIO_SAMPLE_SIZE = (AUDIO_S16SYS & SDL_AUDIO_MASK_BITSIZE)/8; //in bytes
 static const int BYTES_PER_AUDIO_SAMPLE = AUDIO_SAMPLE_SIZE * NUM_AUDIO_CHANNELS;
 static const int MIDDLE_C_FREQ = 256;
 static const int MIDDLE_VOLUME_AMPLITUDE = 500;
+
+static SDL_AudioDeviceID audio_device_id = 0;
+static SDL_AudioSpec audio_settings;
+static AudioRingBuffer audio_ring_buffer{};
+double t_sine = 0.0;
+int16_t wave_amplitude = MIDDLE_VOLUME_AMPLITUDE;
+int wave_hz = MIDDLE_C_FREQ;
 
 // Input stuff
 #define MAX_CONTROLLERS 4
@@ -332,17 +339,11 @@ static void audio_callback(void* user_data, uint8_t* audio_data, int length)
 }
 
 // return the modified new wave offset
-static double audio_sine_wave(
-    // buffer size in bytes; must be a multiple of sample size
-    void * buffer, int buffer_size,
-    // TODO allow audio channels to have different amplitudes/offsets... etc
-    int16_t amplitude,
-    // period and offset are in number of samples
-    int wave_hz, double t_sine)
+static void audio_sine_wave(void * buffer, int buffer_size)
 {
     DEBUG_ASSERT(buffer_size % BYTES_PER_AUDIO_SAMPLE == 0);
     // how many samples per full wave
-    int wave_period = AUDIO_FREQ / wave_hz;
+    int wave_period = AUDIO_SAMPLES_PER_SECOND / wave_hz;
     int num_samples = buffer_size / BYTES_PER_AUDIO_SAMPLE;
     // one sample's worth for this period
     // I DONT HAVE GREAT INTUITION ON THIS
@@ -354,53 +355,13 @@ static double audio_sine_wave(
 
         for (int ch = 0; ch < NUM_AUDIO_CHANNELS; ++ch)
         {
-            *curr_sample = (int16_t)((double)amplitude * sin(t_sine));
+            *curr_sample = (int16_t)((double)wave_amplitude * sin(t_sine));
             curr_sample++;
         }
 
         t_sine += t_sine_inc;
     }
-
-    return t_sine;
 }
-
-
-// return the modified new wave offset
-static int audio_square_wave(
-    // buffer size in bytes; must be a multiple of sample size
-    void * buffer, int buffer_size,
-    // TODO allow audio channels to have different amplitudes/offsets... etc
-    int16_t amplitude,
-    // hz and offset are in number of samples
-    int wave_hz, int wave_offset)
-{
-    DEBUG_ASSERT(buffer_size % BYTES_PER_AUDIO_SAMPLE == 0);
-
-    // so this is samples_per_second * period, i.e. it's the period (1/wave_hz) in number of samples
-    int wave_period = AUDIO_FREQ / wave_hz;
-    // make it even
-    wave_period = wave_period % 2 ? wave_period - 1 : wave_period;
-    // make sure it's not 0
-    wave_period = max(2, wave_period);
-    int half_wave_period = wave_period / 2;
-    int num_samples = buffer_size / BYTES_PER_AUDIO_SAMPLE;
-
-    int16_t* curr_sample = (int16_t*)buffer;
-
-    for (int i = 0; i < num_samples; ++i) {
-
-        for (int ch = 0; ch < NUM_AUDIO_CHANNELS; ++ch)
-        {
-            *curr_sample = wave_offset >= half_wave_period ? -amplitude : amplitude;
-            curr_sample++;
-        }
-
-        wave_offset = (wave_offset + 1) % wave_period;
-    }
-
-    return wave_offset;
-}
-
 
 int main(int argc, char* args[])
 {
@@ -457,10 +418,10 @@ int main(int argc, char* args[])
 
     SDL_AudioSpec actual_settings{};
 
-    audio_settings.freq = AUDIO_FREQ;
+    audio_settings.freq = AUDIO_SAMPLES_PER_SECOND;
     audio_settings.format = AUDIO_S16SYS;
     audio_settings.channels = NUM_AUDIO_CHANNELS;
-    audio_settings.samples = 4096;
+    audio_settings.samples = SDL_AUDIO_BUFFER_SAMPLES;
     audio_settings.callback = audio_callback;
     audio_settings.userdata = &audio_ring_buffer;
 
@@ -470,20 +431,11 @@ int main(int argc, char* args[])
     if (audio_device_id == 0) {
         FATAL_PRINTF("Failed to open audio - SDL_Error: %s\n", SDL_GetError());
     }
-    if (actual_settings.format != AUDIO_S16LSB || actual_settings.freq != AUDIO_FREQ || actual_settings.samples != 4096) {
+    if (actual_settings.format != AUDIO_S16LSB || actual_settings.freq != AUDIO_SAMPLES_PER_SECOND || actual_settings.samples != SDL_AUDIO_BUFFER_SAMPLES) {
         FATAL_PRINTF("Audio settings don't match requested\n");
     }
     DEBUG_PRINTF("Audio device selected: %d\n", audio_device_id);
     audio_settings = actual_settings;
-
-    // sample is 16 bits times number of channels
-    const int bytes_per_sample = sizeof(int16_t) * audio_settings.channels;
-    // 2 seconds of samples
-    const int num_samples_in_ring_buffer = audio_settings.freq;
-
-    double t_sine = 0.0;
-    int16_t wave_amplitude = MIDDLE_VOLUME_AMPLITUDE;
-    int wave_hz = MIDDLE_C_FREQ;
 
     // Lock the callback
     SDL_LockAudioDevice(audio_device_id);
@@ -493,8 +445,8 @@ int main(int argc, char* args[])
         DEBUG_PRINTF("Audio silence: %d\n", audio_settings.silence);
         DEBUG_PRINTF("SDL audio buffer size: %d\n", audio_settings.size);
 
-        // initialize ring buffer
-        audio_ring_buffer.size = bytes_per_sample * num_samples_in_ring_buffer;
+        // initialize ring buffer to 1 second
+        audio_ring_buffer.size = BYTES_PER_AUDIO_SAMPLE * AUDIO_RING_BUFFER_NUM_SAMPLES;
         DEBUG_ASSERT((int)audio_settings.size <= audio_ring_buffer.size);
 
         audio_ring_buffer.write_index = 0;
@@ -507,10 +459,9 @@ int main(int argc, char* args[])
             FATAL_PRINTF("Couldn't allocate audio ring buffer\n");
         }
 
-        // fill ring buffer with silence
-        //memset(audio_ring_buffer.data, audio_settings.silence, audio_ring_buffer.size);
-        // fill ring buffer with square wave
-        t_sine = audio_sine_wave(audio_ring_buffer.data, audio_ring_buffer.size, wave_amplitude, wave_hz, t_sine);
+        // fill ring buffer with sine wave
+        audio_sine_wave(audio_ring_buffer.data, AUDIO_LATENCY_SAMPLE_COUNT * AUDIO_SAMPLE_SIZE);
+        audio_ring_buffer.write_index += AUDIO_LATENCY_SAMPLE_COUNT * AUDIO_SAMPLE_SIZE;
 
     }
     // Unlock the callback
@@ -580,37 +531,39 @@ int main(int argc, char* args[])
 
         SDL_RenderPresent(renderer);
 
-        // Fill next part of audio buffer with square wave, up to the play cursor
-        // need to make 1 easy assumption: we can write 2 seconds of audio faster than we can play it
+        // Fill next part of audio buffer with sound, up to the play cursor + a bit ahead
+        // need to make 1 assumption: we can write 'a bit ahead' faster than it can be played
         // hence, write index is always considered ahead of play index
+        // i.e. play index shouldn't completely loop write index; writing should always be able to catch up even if it gets behind
 
-        // if write_index has caught up, don't write anything;
         SDL_LockAudioDevice(audio_device_id);
-        if (audio_ring_buffer.write_index != audio_ring_buffer.play_index)
+        int target_index = (audio_ring_buffer.play_index + AUDIO_LATENCY_SAMPLE_COUNT * AUDIO_SAMPLE_SIZE) % audio_ring_buffer.size;
+        DEBUG_ASSERT(audio_ring_buffer.play_index % BYTES_PER_AUDIO_SAMPLE == 0);
+        DEBUG_ASSERT(audio_ring_buffer.write_index % BYTES_PER_AUDIO_SAMPLE == 0);
+        DEBUG_ASSERT(target_index % BYTES_PER_AUDIO_SAMPLE == 0);
+        // if write_index has caught up, don't write anything;
+        if (audio_ring_buffer.write_index != target_index)
         {
-            DEBUG_ASSERT(audio_ring_buffer.write_index % BYTES_PER_AUDIO_SAMPLE == 0);
-            DEBUG_ASSERT(audio_ring_buffer.play_index % BYTES_PER_AUDIO_SAMPLE == 0);
+            // we want to write AUDIO_LATENCY_SAMPLE_COUNT samples ahead of the play cursor
             // get region/s to fill (2 cases because of circular buffer)
             int region_size_1, region_size_2;
-            //int bytes_played_since_last;    // this is generally the size of the sdl internal buffer
-            if (audio_ring_buffer.write_index < audio_ring_buffer.play_index)
+            if (audio_ring_buffer.write_index < target_index)
             {
-                region_size_1 = audio_ring_buffer.play_index - audio_ring_buffer.write_index;
+                region_size_1 = target_index - audio_ring_buffer.write_index;
                 region_size_2 = 0;
             }
             else
             {
                 region_size_1 = audio_ring_buffer.size - audio_ring_buffer.write_index;
-                region_size_2 = audio_ring_buffer.play_index;
+                region_size_2 = target_index;
             }
-            //bytes_played_since_last = region_size_1 + region_size_2;
 
             void* region = (void*)&((int8_t*)audio_ring_buffer.data)[audio_ring_buffer.write_index];
 
-            t_sine = audio_sine_wave(region, region_size_1, wave_amplitude, wave_hz, t_sine);
+            audio_sine_wave(region, region_size_1);
             if (region_size_2)
             {
-                t_sine = audio_sine_wave(audio_ring_buffer.data, region_size_2, wave_amplitude, wave_hz, t_sine);
+                audio_sine_wave(audio_ring_buffer.data, region_size_2);
             }
 
             audio_ring_buffer.write_index = (audio_ring_buffer.write_index + region_size_1 + region_size_2) % audio_ring_buffer.size;
