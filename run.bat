@@ -1,3 +1,3 @@
 @echo off
 call build.bat
-call build\sdl-game-starter.exe
+call build\sdl_game_starter.exe

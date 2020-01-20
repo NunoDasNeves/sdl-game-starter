@@ -25,9 +25,10 @@ set DISABLED_WARNINGS=/wd4100 /wd4189
 set COMPILER_FLAGS=/Oi /GR- /EHa- /nologo /W4 /MT /Gm- /Z7 /Fm /I %SDL_DIR%\include
 
 :: Linker flags
-:: /opt:ref     remove unneeded stuff from .map file
-:: /LIBPATH:    sdl library path, libraries to include, and additional arguments (enable console subsystem for debugging)
-set LINKER_FLAGS=/LIBPATH:%SDL_DIR%\lib\x64 SDL2.lib SDL2main.lib /SUBSYSTEM:CONSOLE
+:: /opt:ref         remove unneeded stuff from .map file
+:: /LIBPATH:        sdl library path, libraries to include, and additional arguments (enable console subsystem for debugging)
+:: /INCREMENTAL:NO  perform a full link
+set LINKER_FLAGS=/INCREMENTAL:NO /LIBPATH:%SDL_DIR%\lib\x64 SDL2.lib SDL2main.lib /SUBSYSTEM:CONSOLE
 
 :: Create build directory and copy SDL2.dll in case it isn't there
 IF NOT EXIST build mkdir build

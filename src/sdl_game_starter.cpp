@@ -45,8 +45,6 @@ struct AudioRingBuffer
     void* data;
 };
 
-static bool running;
-
 // Rendering stuff
 static SDL_Window* window = NULL;
 static SDL_Renderer* renderer = NULL;
@@ -58,7 +56,7 @@ static BufferedTexture buffered_texture;
 static const int AUDIO_SAMPLES_PER_SECOND = 48000;
 static const int SDL_AUDIO_BUFFER_SAMPLES = 512;
 static const int AUDIO_RING_BUFFER_NUM_SAMPLES = AUDIO_SAMPLES_PER_SECOND;
-static const int AUDIO_LATENCY_SAMPLE_COUNT = AUDIO_SAMPLES_PER_SECOND / 15;
+static const int AUDIO_LATENCY_SAMPLES_AHEAD = AUDIO_SAMPLES_PER_SECOND / 15;
 static const int NUM_AUDIO_CHANNELS = 2;
 static const int AUDIO_SAMPLE_SIZE = (AUDIO_S16SYS & SDL_AUDIO_MASK_BITSIZE)/8; //in bytes
 static const int BYTES_PER_AUDIO_SAMPLE = AUDIO_SAMPLE_SIZE * NUM_AUDIO_CHANNELS;
@@ -68,9 +66,6 @@ static const int MIDDLE_VOLUME_AMPLITUDE = 500;
 static SDL_AudioDeviceID audio_device_id = 0;
 static SDL_AudioSpec audio_settings;
 static AudioRingBuffer audio_ring_buffer{};
-double t_sine = 0.0;
-int16_t wave_amplitude = MIDDLE_VOLUME_AMPLITUDE;
-int wave_hz = MIDDLE_C_FREQ;
 
 // Input stuff
 #define MAX_CONTROLLERS 4
@@ -83,7 +78,8 @@ static GameKeyboardState game_keyboard_state{};
 static double target_frame_ms = 16.66666;
 
 // Game stuff
-static GameState game_state;
+static SoundBuffer sound_buffer{};
+static GameState game_state{};
 
 
 int clamp(int val, int lo, int hi) {
@@ -122,7 +118,8 @@ static void handle_event(SDL_Event* e)
     switch(e->type)
     {
         case SDL_QUIT:
-            running = false;
+            game_state.running = false;
+            break;
 
         case SDL_WINDOWEVENT:
         {
@@ -231,31 +228,6 @@ static void audio_callback(void* user_data, uint8_t* audio_data, int length)
     {
         memcpy(audio_data, &((uint8_t*)ring_buffer->data)[ring_buffer->play_index], length);
         ring_buffer->play_index += length;
-    }
-}
-
-// return the modified new wave offset
-static void audio_sine_wave(void * buffer, int buffer_size)
-{
-    DEBUG_ASSERT(buffer_size % BYTES_PER_AUDIO_SAMPLE == 0);
-    // how many samples per full wave
-    int wave_period = AUDIO_SAMPLES_PER_SECOND / wave_hz;
-    int num_samples = buffer_size / BYTES_PER_AUDIO_SAMPLE;
-    // one sample's worth for this period
-    // I DONT HAVE GREAT INTUITION ON THIS
-    double t_sine_inc = 2.0 * M_PI * 1.0 / (double)wave_period;
-
-    int16_t* curr_sample = (int16_t*)buffer;
-
-    for (int i = 0; i < num_samples; ++i) {
-
-        for (int ch = 0; ch < NUM_AUDIO_CHANNELS; ++ch)
-        {
-            *curr_sample = (int16_t)((double)wave_amplitude * sin(t_sine));
-            curr_sample++;
-        }
-
-        t_sine += t_sine_inc;
     }
 }
 
@@ -380,26 +352,34 @@ int main(int argc, char* args[])
             FATAL_PRINTF("Couldn't allocate audio ring buffer\n");
         }
 
-        // fill ring buffer with sine wave
-        audio_sine_wave(audio_ring_buffer.data, AUDIO_LATENCY_SAMPLE_COUNT * AUDIO_SAMPLE_SIZE);
-        audio_ring_buffer.write_index += AUDIO_LATENCY_SAMPLE_COUNT * AUDIO_SAMPLE_SIZE;
-
+        // fill ring buffer with silence
+        memset(audio_ring_buffer.data, audio_settings.silence, audio_ring_buffer.size);
     }
     // Unlock the callback
     SDL_UnlockAudioDevice(audio_device_id);
 
 
     // Now do the game loop
+    game_state.wave_amplitude = MIDDLE_VOLUME_AMPLITUDE;
+    game_state.wave_hz = MIDDLE_C_FREQ;
     game_state.x_offset = 0;
     game_state.y_offset = 0;
     game_state.running = true;
+
+    sound_buffer.buffer_size = AUDIO_SAMPLES_PER_SECOND * BYTES_PER_AUDIO_SAMPLE;
+    sound_buffer.buffer = LARGE_ALLOC(sound_buffer.buffer_size);
+    if (!sound_buffer.buffer)
+    {
+        FATAL_PRINTF("Couldn't allocate game sound buffer\n");
+    }
+    sound_buffer.samples_per_second = audio_settings.freq;
+    sound_buffer.bytes_per_sample = BYTES_PER_AUDIO_SAMPLE;
+    sound_buffer.num_channels = NUM_AUDIO_CHANNELS;
 
     // input and gradient scroll stuff
     SDL_Event e;
     int16_t stick_x = 0;
     int16_t stick_y = 0;
-    int x_offset = 0;
-    int y_offset = 0;
     int x_vel = 0;
     int y_vel = 0;
     const int MAX_SCROLL_SPEED = 5;
@@ -436,26 +416,22 @@ int main(int argc, char* args[])
         // TODO replace with Vector2; this doesn't work properly because the vector length must be clamped, not x and y individually
         x_vel = clamp((int)(((double)stick_x / 32767.0) * (double)MAX_SCROLL_SPEED) + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
         y_vel = clamp((int)(((double)stick_y / 32767.0) * (double)MAX_SCROLL_SPEED) + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
-        x_offset += x_vel;
-        y_offset += y_vel;
+        game_state.x_offset += x_vel;
+        game_state.y_offset += y_vel;
         // change freq & volume of wave
         if (stick_y >= 0)
         {
-            wave_hz = MIDDLE_C_FREQ + (int16_t)((double)MAX_HZ * (double)stick_y / 32767.0);
+            game_state.wave_hz = MIDDLE_C_FREQ + (int16_t)((double)MAX_HZ * (double)stick_y / 32767.0);
         }
         else if (stick_y < 0)
         {
-            wave_hz = MIN_HZ + (int16_t)((double)(MIDDLE_C_FREQ - MIN_HZ) * (((double)stick_y / 32767.0) + 1.0));
+            game_state.wave_hz = MIN_HZ + (int16_t)((double)(MIDDLE_C_FREQ - MIN_HZ) * (((double)stick_y / 32767.0) + 1.0));
         }
-        wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((double)MAX_VOLUME_OFFSET * (double)stick_x / 32767.0);
+        game_state.wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((double)MAX_VOLUME_OFFSET * (double)stick_x / 32767.0);
+
 
         SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
         SDL_RenderClear(renderer);
-
-        game_update_and_render(&buffered_texture.buffer, &game_state);
-        render_offscreen_buffer(&buffered_texture);
-
-        SDL_RenderPresent(renderer);
 
         // Fill next part of audio buffer with sound, up to the play cursor + a bit ahead
         // need to make 1 assumption: we can write 'a bit ahead' faster than it can be played
@@ -463,40 +439,52 @@ int main(int argc, char* args[])
         // i.e. play index shouldn't completely loop write index; writing should always be able to catch up even if it gets behind
 
         SDL_LockAudioDevice(audio_device_id);
-        int target_index = (audio_ring_buffer.play_index + AUDIO_LATENCY_SAMPLE_COUNT * AUDIO_SAMPLE_SIZE) % audio_ring_buffer.size;
+        // we want to write AUDIO_LATENCY_SAMPLES_AHEAD samples ahead of the play cursor
+        int target_index = (audio_ring_buffer.play_index + AUDIO_LATENCY_SAMPLES_AHEAD * BYTES_PER_AUDIO_SAMPLE) % audio_ring_buffer.size;
+        SDL_UnlockAudioDevice(audio_device_id);
+        int region_size_1 = 0, region_size_2 = 0;
+
         DEBUG_ASSERT(audio_ring_buffer.play_index % BYTES_PER_AUDIO_SAMPLE == 0);
         DEBUG_ASSERT(audio_ring_buffer.write_index % BYTES_PER_AUDIO_SAMPLE == 0);
         DEBUG_ASSERT(target_index % BYTES_PER_AUDIO_SAMPLE == 0);
-        // if write_index has caught up, don't write anything;
-        if (audio_ring_buffer.write_index != target_index)
+
+        // get region/s to fill (2 cases because of circular buffer)
+        if (audio_ring_buffer.write_index <= target_index)
         {
-            // we want to write AUDIO_LATENCY_SAMPLE_COUNT samples ahead of the play cursor
-            // get region/s to fill (2 cases because of circular buffer)
-            int region_size_1, region_size_2;
-            if (audio_ring_buffer.write_index < target_index)
-            {
-                region_size_1 = target_index - audio_ring_buffer.write_index;
-                region_size_2 = 0;
-            }
-            else
-            {
-                region_size_1 = audio_ring_buffer.size - audio_ring_buffer.write_index;
-                region_size_2 = target_index;
-            }
+            region_size_1 = target_index - audio_ring_buffer.write_index;
+            region_size_2 = 0;
+        }
+        else
+        {
+            region_size_1 = audio_ring_buffer.size - audio_ring_buffer.write_index;
+            region_size_2 = target_index;
+        }
+
+        sound_buffer.buffer_size = region_size_1 + region_size_2;
+        //DEBUG_PRINTF("%d\n", sound_buffer.buffer_size);
+
+        game_update_and_render(&buffered_texture.buffer, &sound_buffer, &game_state);
+
+        if (sound_buffer.buffer_size)
+        {
+            SDL_LockAudioDevice(audio_device_id);
 
             void* region = (void*)&((int8_t*)audio_ring_buffer.data)[audio_ring_buffer.write_index];
 
-            audio_sine_wave(region, region_size_1);
+            memcpy(region, sound_buffer.buffer, region_size_1);
             if (region_size_2)
             {
-                audio_sine_wave(audio_ring_buffer.data, region_size_2);
+                memcpy(audio_ring_buffer.data, (void*)&((int8_t*)sound_buffer.buffer)[region_size_1], region_size_2);
             }
 
             audio_ring_buffer.write_index = (audio_ring_buffer.write_index + region_size_1 + region_size_2) % audio_ring_buffer.size;
 
+            SDL_UnlockAudioDevice(audio_device_id);
         }
-        SDL_UnlockAudioDevice(audio_device_id);
 
+        render_offscreen_buffer(&buffered_texture);
+        SDL_RenderPresent(renderer);
+        
         uint64_t frame_end_time = SDL_GetPerformanceCounter();
         double frame_time_ms = 1000.0 * (double)(frame_end_time - frame_start_time)/(double)SDL_GetPerformanceFrequency();
         double diff_ms = target_frame_ms - frame_time_ms;
@@ -513,7 +501,7 @@ int main(int argc, char* args[])
             loops++;
         }
         //DEBUG_PRINTF("loops: %d\n", loops);
-        DEBUG_PRINTF("frame_time_ms: %lf\n", frame_time_ms);
+        //DEBUG_PRINTF("frame_time_ms: %lf\n", frame_time_ms);
         frame_start_time = frame_end_time;
 
     }
