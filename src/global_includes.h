@@ -7,6 +7,12 @@
 #include<assert.h>
 #include<math.h>
 
+static_assert(CHAR_BIT == 8, "Char must be 8 bits");
+
+#define sizeofarray(arr) (sizeof(arr) / sizeof((arr)[0]))
+
+#define BITS_PER_BYTE 8
+
 // TODO put these kind of defines in a header unless platform-specific
 #ifdef CONSOLE_DEBUG
 #define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)

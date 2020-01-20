@@ -21,20 +21,11 @@
 #define LARGE_FREE(X,Y) munmap(X, Y)
 #endif
 
-static_assert(CHAR_BIT == 8, "char not 8 bits");
 
 struct BufferedTexture
 {
     SDL_Texture* texture;
     OffscreenBuffer buffer;
-};
-
-struct GameKeyboardState
-{
-    bool up;
-    bool down;
-    bool left;
-    bool right;
 };
 
 struct AudioRingBuffer
@@ -58,21 +49,16 @@ static const int SDL_AUDIO_BUFFER_SAMPLES = 512;
 static const int AUDIO_RING_BUFFER_NUM_SAMPLES = AUDIO_SAMPLES_PER_SECOND;
 static const int AUDIO_LATENCY_SAMPLES_AHEAD = AUDIO_SAMPLES_PER_SECOND / 15;
 static const int NUM_AUDIO_CHANNELS = 2;
-static const int AUDIO_SAMPLE_SIZE = (AUDIO_S16SYS & SDL_AUDIO_MASK_BITSIZE)/8; //in bytes
+static const int AUDIO_SAMPLE_SIZE = (AUDIO_S16SYS & SDL_AUDIO_MASK_BITSIZE) / BITS_PER_BYTE; //in bytes
 static const int BYTES_PER_AUDIO_SAMPLE = AUDIO_SAMPLE_SIZE * NUM_AUDIO_CHANNELS;
-static const int MIDDLE_C_FREQ = 256;
-static const int MIDDLE_VOLUME_AMPLITUDE = 500;
 
 static SDL_AudioDeviceID audio_device_id = 0;
 static SDL_AudioSpec audio_settings;
 static AudioRingBuffer audio_ring_buffer{};
 
 // Input stuff
-#define MAX_CONTROLLERS 4
 static int num_controllers = 0;
 static SDL_GameController* controller_handles[MAX_CONTROLLERS];
-
-static GameKeyboardState game_keyboard_state{};
 
 // Timer stuff
 static double target_frame_ms = 16.66666;
@@ -80,13 +66,8 @@ static double target_frame_ms = 16.66666;
 // Game stuff
 static SoundBuffer sound_buffer{};
 static GameState game_state{};
+static GameInputBuffer game_input_buffer{};
 
-
-int clamp(int val, int lo, int hi) {
-    if (val < lo) return lo;
-    if (val > hi) return hi;
-    return val;
-}
 
 static void render_offscreen_buffer(BufferedTexture* b)
 {
@@ -113,7 +94,7 @@ static void add_controller(int joystick_index) {
 
 static void handle_event(SDL_Event* e)
 {
-    bool key_down = false;
+    bool key_state = false;
 
     switch(e->type)
     {
@@ -142,27 +123,28 @@ static void handle_event(SDL_Event* e)
         // TODO remove controller
         // TODO support text input as per: https://wiki.libsdl.org/Tutorials/TextInput
         case SDL_KEYDOWN:
-            key_down = true;
+            key_state = true;
         case SDL_KEYUP:
         {
             SDL_Keycode keycode = e->key.keysym.sym;
+            KeyboardInput* keyboard = &(game_input_buffer.buffer[game_input_buffer.last].keyboard);
             switch(keycode)
             {
                 case SDLK_LEFT:
                 case SDLK_a:
-                    game_keyboard_state.left = key_down;
+                    keyboard->left.pressed = key_state;
                     break;
                 case SDLK_UP:
                 case SDLK_w:
-                    game_keyboard_state.up = key_down;
+                    keyboard->up.pressed = key_state;
                     break;
                 case SDLK_RIGHT:
                 case SDLK_d:
-                    game_keyboard_state.right = key_down;
+                    keyboard->right.pressed = key_state;
                     break;
                 case SDLK_DOWN:
                 case SDLK_s:
-                    game_keyboard_state.down = key_down;
+                    keyboard->down.pressed = key_state;
                     break;
             }
             /*
@@ -176,35 +158,46 @@ static void handle_event(SDL_Event* e)
     }
 }
 
-static const int deadzone_left = 5000;
-static void poll_controllers(int16_t* stick_x, int16_t* stick_y)
+static void poll_controllers()
 {
-    // TODO: store this or something
+    // TODO better deadzone handling, maybe adjustable
+    static const int deadzone_left = 5000;
+    GameInput* game_input = &(game_input_buffer.buffer[game_input_buffer.last]);
+    game_input->num_controllers = 0;
+
     for (int i = 0; i < MAX_CONTROLLERS; ++i)
     {
+
+        ControllerInput* controller = &(game_input->controllers[i]);
+
         if(controller_handles[i] != NULL && SDL_GameControllerGetAttached(controller_handles[i]))
         {
-            bool up = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_UP);
-            bool down = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_DOWN);
-            bool left = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_LEFT);
-            bool right = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
-            bool start = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_START);
-            bool back = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_BACK);
-            bool leftShoulder = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
-            bool rightShoulder = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
-            bool a_button = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_A);
-            bool b_button = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_B);
-            bool x_button = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_X);
-            bool y_button = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_Y);
+            game_input->num_controllers++;
+            controller->plugged_in = true;
 
-            *stick_x = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_LEFTX);
-            *stick_y = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_LEFTY);
-            *stick_x = abs(*stick_x) < deadzone_left ? 0 : *stick_x;
-            *stick_y = abs(*stick_y) < deadzone_left ? 0 : *stick_y;
+            controller->up.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_UP);
+            controller->down.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+            controller->left.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+            controller->right.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+            //= SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_START);
+            //= SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_BACK);
+            //= SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+            //= SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+            controller->a.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_A);
+            controller->b.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_B);
+            controller->x.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_X);
+            controller->y.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_Y);
+
+            int16_t stick_x = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_LEFTX);
+            int16_t stick_y = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_LEFTY);
+            stick_x = abs(stick_x) < deadzone_left ? 0 : stick_x;
+            stick_y = abs(stick_y) < deadzone_left ? 0 : stick_y;
+            controller->left_stick_x.value = stick_x;
+            controller->left_stick_y.value = stick_y;
         }
         else
         {
-            // TODO: controller is not plugged in
+            controller->plugged_in = false;
         }
     }
 }
@@ -358,10 +351,9 @@ int main(int argc, char* args[])
     // Unlock the callback
     SDL_UnlockAudioDevice(audio_device_id);
 
-
-    // Now do the game loop
-    game_state.wave_amplitude = MIDDLE_VOLUME_AMPLITUDE;
-    game_state.wave_hz = MIDDLE_C_FREQ;
+    // Initialize game state, sound, input
+    game_state.wave_amplitude = 0;
+    game_state.wave_hz = 0;
     game_state.x_offset = 0;
     game_state.y_offset = 0;
     game_state.running = true;
@@ -376,60 +368,32 @@ int main(int argc, char* args[])
     sound_buffer.bytes_per_sample = BYTES_PER_AUDIO_SAMPLE;
     sound_buffer.num_channels = NUM_AUDIO_CHANNELS;
 
-    // input and gradient scroll stuff
-    SDL_Event e;
-    int16_t stick_x = 0;
-    int16_t stick_y = 0;
-    int x_vel = 0;
-    int y_vel = 0;
-    const int MAX_SCROLL_SPEED = 5;
+    memset(&game_input_buffer, 0, sizeof(GameInputBuffer));
 
-    // audio stuff
-    const int MIN_HZ = 20;
-    const int MAX_HZ = 256*2;
-    const int MAX_VOLUME_OFFSET = 300;
+    // Now do the game loop
+    SDL_Event e;
 
     // timer
     uint64_t frame_start_time = SDL_GetPerformanceCounter();
 
     while(game_state.running)
     {
+        // Input
+        // advance game input buffer, and clear next entry
+        game_input_buffer.last = (game_input_buffer.last + 1) % INPUT_BUFFER_SIZE;
+        memset(&game_input_buffer.buffer[game_input_buffer.last], 0, sizeof(GameInput));
+        // copy previous keyboard state (otherwise keys only fire on each keyboard event, OS repeat rate issue etc)
+        game_input_buffer.buffer[game_input_buffer.last].keyboard = \
+            game_input_buffer.buffer[(game_input_buffer.last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard;
         
+
         while (SDL_PollEvent(&e))
         {
             handle_event(&e);
         }
+        poll_controllers();
 
-        x_vel = 0;
-        y_vel = 0;
-        if (game_keyboard_state.up && !game_keyboard_state.down) {
-            y_vel = -MAX_SCROLL_SPEED;
-        } else if (game_keyboard_state.down && !game_keyboard_state.up) {
-            y_vel = MAX_SCROLL_SPEED;
-        }
-        if (game_keyboard_state.left && !game_keyboard_state.right) {
-            x_vel = -MAX_SCROLL_SPEED;
-        } else if (game_keyboard_state.right && !game_keyboard_state.left) {
-            x_vel = +MAX_SCROLL_SPEED;
-        }
-        poll_controllers(&stick_x, &stick_y);
-        // TODO replace with Vector2; this doesn't work properly because the vector length must be clamped, not x and y individually
-        x_vel = clamp((int)(((double)stick_x / 32767.0) * (double)MAX_SCROLL_SPEED) + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
-        y_vel = clamp((int)(((double)stick_y / 32767.0) * (double)MAX_SCROLL_SPEED) + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
-        game_state.x_offset += x_vel;
-        game_state.y_offset += y_vel;
-        // change freq & volume of wave
-        if (stick_y >= 0)
-        {
-            game_state.wave_hz = MIDDLE_C_FREQ + (int16_t)((double)MAX_HZ * (double)stick_y / 32767.0);
-        }
-        else if (stick_y < 0)
-        {
-            game_state.wave_hz = MIN_HZ + (int16_t)((double)(MIDDLE_C_FREQ - MIN_HZ) * (((double)stick_y / 32767.0) + 1.0));
-        }
-        game_state.wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((double)MAX_VOLUME_OFFSET * (double)stick_x / 32767.0);
-
-
+        // Rendering and audio
         SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
         SDL_RenderClear(renderer);
 
@@ -437,9 +401,10 @@ int main(int argc, char* args[])
         // need to make 1 assumption: we can write 'a bit ahead' faster than it can be played
         // hence, write index is always considered ahead of play index
         // i.e. play index shouldn't completely loop write index; writing should always be able to catch up even if it gets behind
+        // for final code we need to ensure that this never happens however; it will cause an audible skip
 
         SDL_LockAudioDevice(audio_device_id);
-        // we want to write AUDIO_LATENCY_SAMPLES_AHEAD samples ahead of the play cursor
+        // we want to write AUDIO_LATENCY_SAMPLES_AHEAD (samples ahead) of the play cursor
         int target_index = (audio_ring_buffer.play_index + AUDIO_LATENCY_SAMPLES_AHEAD * BYTES_PER_AUDIO_SAMPLE) % audio_ring_buffer.size;
         SDL_UnlockAudioDevice(audio_device_id);
         int region_size_1 = 0, region_size_2 = 0;
@@ -463,7 +428,7 @@ int main(int argc, char* args[])
         sound_buffer.buffer_size = region_size_1 + region_size_2;
         //DEBUG_PRINTF("%d\n", sound_buffer.buffer_size);
 
-        game_update_and_render(&buffered_texture.buffer, &sound_buffer, &game_state);
+        game_update_and_render(&game_input_buffer, &buffered_texture.buffer, &sound_buffer, &game_state);
 
         if (sound_buffer.buffer_size)
         {
@@ -485,6 +450,7 @@ int main(int argc, char* args[])
         render_offscreen_buffer(&buffered_texture);
         SDL_RenderPresent(renderer);
         
+        // Timing
         uint64_t frame_end_time = SDL_GetPerformanceCounter();
         double frame_time_ms = 1000.0 * (double)(frame_end_time - frame_start_time)/(double)SDL_GetPerformanceFrequency();
         double diff_ms = target_frame_ms - frame_time_ms;

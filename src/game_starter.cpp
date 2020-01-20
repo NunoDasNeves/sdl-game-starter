@@ -1,6 +1,23 @@
 #include"game_starter.h"
 
+// TODO define this in our own math library
 #define M_PI 3.14159265359
+
+#define MIDDLE_C_FREQ 256
+#define MIDDLE_VOLUME_AMPLITUDE 500
+
+const int MAX_SCROLL_SPEED = 5;
+const int MIN_HZ = 20;
+const int MAX_HZ = 256*2;
+const int MAX_VOLUME_OFFSET = 300;
+
+
+// TODO move to util functions
+int clamp(int val, int lo, int hi) {
+    if (val < lo) return lo;
+    if (val > hi) return hi;
+    return val;
+}
 
 // return the modified new wave offset
 static void output_sine_wave(SoundBuffer* sound_buffer, int wave_hz, int wave_amplitude)
@@ -64,8 +81,71 @@ static void render_gradient_to_buffer(OffscreenBuffer* buffer, int x_offset, int
     }
 }
 
-void game_update_and_render(OffscreenBuffer* offscreen_buffer, SoundBuffer* sound_buffer, GameState* game_state)
+
+void game_update_and_render(GameInputBuffer* input_buffer, OffscreenBuffer* offscreen_buffer, SoundBuffer* sound_buffer, GameState* game_state)
 {
+
+    int x_vel = 0;
+    int y_vel = 0;
+
+    GameInput* game_input = &(input_buffer->buffer[input_buffer->last]);
+    KeyboardInput* keyboard = &(game_input->keyboard);
+    // find a plugged in controller
+    ControllerInput* controller = NULL;
+    for (int i = 0; i < MAX_CONTROLLERS; ++i)
+    {
+        if (game_input->controllers[i].plugged_in)
+        {
+            controller = &(game_input->controllers[i]);
+            break;
+        }
+    }
+
+    // testing buffered input
+    if (input_buffer->buffer[input_buffer->last].keyboard.up.pressed && \
+        !input_buffer->buffer[(input_buffer->last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard.up.pressed)
+    {
+        DEBUG_PRINTF("up key pressed\n");
+    }
+    if (!input_buffer->buffer[input_buffer->last].keyboard.up.pressed && \
+        input_buffer->buffer[(input_buffer->last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard.up.pressed)
+    {
+        DEBUG_PRINTF("up key released\n");
+    }
+
+    if (keyboard->up.pressed && !keyboard->down.pressed) {
+        y_vel = -MAX_SCROLL_SPEED;
+    } else if (keyboard->down.pressed && !keyboard->up.pressed) {
+        y_vel = MAX_SCROLL_SPEED;
+    }
+    if (keyboard->left.pressed && !keyboard->right.pressed) {
+        x_vel = -MAX_SCROLL_SPEED;
+    } else if (keyboard->right.pressed && !keyboard->left.pressed) {
+        x_vel = +MAX_SCROLL_SPEED;
+    }
+    if (controller)
+    {
+        // normalize values to approx [-1.0, 1.0]
+        double left_stick_y = (double)controller->left_stick_y.value / 32767.0;
+        double left_stick_x = (double)controller->left_stick_x.value / 32767.0;
+
+        // TODO replace with Vector2; this doesn't work properly because the vector length must be clamped, not x and y individually
+        x_vel = clamp((int)(left_stick_x * (double)MAX_SCROLL_SPEED) + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
+        y_vel = clamp((int)(left_stick_y * (double)MAX_SCROLL_SPEED) + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
+        game_state->x_offset += x_vel;
+        game_state->y_offset += y_vel;
+        // change freq & volume of wave
+        if (left_stick_y >= 0.0)
+        {
+            game_state->wave_hz = MIDDLE_C_FREQ + (int16_t)((double)MAX_HZ * left_stick_y);
+        }
+        else if (controller->left_stick_y.value < 0)
+        {
+            game_state->wave_hz = MIN_HZ + (int16_t)((double)(MIDDLE_C_FREQ - MIN_HZ) * ((left_stick_y + 1.0)/2.0));
+        }
+        game_state->wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((double)MAX_VOLUME_OFFSET * left_stick_x);
+    }
+
     output_sine_wave(sound_buffer, game_state->wave_hz, game_state->wave_amplitude);
     render_gradient_to_buffer(offscreen_buffer, game_state->x_offset, game_state->y_offset);
 }
