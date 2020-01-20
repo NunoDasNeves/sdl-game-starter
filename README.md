@@ -25,22 +25,27 @@ Run build.sh.
 
 ## Features
 - Windows build script
+- Linux build script
 - SDL initialization and window creation
+- Software rendering in dummy game loop
+- Sound initialization and debugging
+- Basic frame rate enforcement pattern
+- Basic input capture from keyboard and controller
+- Dummy game state
 
 ## Roadmap
-- Linux build script
-- Software rendering in dummy game loop
+- Mouse input
 - Unified input map
-- Sound initialization and debugging
 - Debugging stuff
-- Basic frame rate enforcement pattern
-- Performance counter helper functions
-- Dummy game state
-- File IO stuff
-- ...other basic stuff I may have forgotten
-
-## Future
-- Compile game code as a dynamically loaded library for iterating at runtime
+- Timer helpers for profiling game code
+- Save game/user data locations
+- Asset loading
 - Fullscreen and multiple monitor support
+- Cursor visibility
+
+## Possible
+- Compile game code as a dynamically loaded library for iterating at runtime
+- Variable framerate support (adjust depending on platform performance)
+- Active window detection
 - May add 32 bit support
 - May add Mac support
