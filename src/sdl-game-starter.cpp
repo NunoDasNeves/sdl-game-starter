@@ -16,6 +16,7 @@
 #include<assert.h>
 #include<math.h>
 
+// TODO put these kind of defines in a header unless platform-specific
 #ifdef CONSOLE_DEBUG
 #define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
 #define DEBUG_ASSERT(E) assert(E)
@@ -113,6 +114,9 @@ static int num_controllers = 0;
 static SDL_GameController* controller_handles[MAX_CONTROLLERS];
 
 static GameKeyboardState game_keyboard_state{};
+
+// Timer stuff
+static double target_frame_ms = 16.66666;
 
 
 int clamp(int val, int lo, int hi) {
@@ -486,6 +490,9 @@ int main(int argc, char* args[])
     const int MAX_HZ = 256*2;
     const int MAX_VOLUME_OFFSET = 300;
 
+    // timer
+    uint64_t frame_start_time = SDL_GetPerformanceCounter();
+
     while(running)
     {
         
@@ -570,6 +577,25 @@ int main(int argc, char* args[])
 
         }
         SDL_UnlockAudioDevice(audio_device_id);
+
+        uint64_t frame_end_time = SDL_GetPerformanceCounter();
+        double frame_time_ms = 1000.0 * (double)(frame_end_time - frame_start_time)/(double)SDL_GetPerformanceFrequency();
+        double diff_ms = target_frame_ms - frame_time_ms;
+        int loops = 0;
+        while (diff_ms > 0.0)
+        {
+            if (diff_ms > 1.1)
+            {
+                SDL_Delay((uint32_t)diff_ms);
+            }
+            frame_end_time = SDL_GetPerformanceCounter();
+            frame_time_ms = 1000.0 * (double)(frame_end_time - frame_start_time)/(double)SDL_GetPerformanceFrequency();
+            diff_ms = target_frame_ms - frame_time_ms;
+            loops++;
+        }
+        //DEBUG_PRINTF("loops: %d\n", loops);
+        DEBUG_PRINTF("frame_time_ms: %lf\n", frame_time_ms);
+        frame_start_time = frame_end_time;
 
     }
 
