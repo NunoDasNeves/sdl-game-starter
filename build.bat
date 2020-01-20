@@ -1,6 +1,6 @@
 @echo off
 
-
+set NAME=sdl_game_starter.exe
 set SDL_DIR=C:\SDL2-2.0.10
 
 :: Debug messages etc
@@ -34,7 +34,9 @@ IF NOT EXIST build mkdir build
 cd build
 IF NOT EXIST SDL2.dll copy %SDL_DIR%\lib\x64\SDL2.dll .
 
+IF EXIST %NAME% del %NAME%
+
 :: Build the thing!
-cl ..\src\sdl-game-starter.cpp %COMPILER_FLAGS% %DISABLED_WARNINGS% %ADDITIONAL_FLAGS% /link %LINKER_FLAGS%
+cl ..\src\sdl_game_starter.cpp ..\src\game_starter.cpp %COMPILER_FLAGS% %DISABLED_WARNINGS% %ADDITIONAL_FLAGS% /link %LINKER_FLAGS%
 
 cd ..

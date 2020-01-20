@@ -8,40 +8,7 @@
 #include<sys/mman.h>
 #endif
 
-#include<stdio.h>
-#include<stdlib.h>
-#include<stdint.h>
-#include<assert.h>
-#include<limits.h>
-#include<assert.h>
-#include<math.h>
-
-// TODO put these kind of defines in a header unless platform-specific
-#ifdef CONSOLE_DEBUG
-#define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
-#define DEBUG_ASSERT(E) assert(E)
-#else
-#define DEBUG_PRINTF(...)
-#define DEBUG_ASSERT(E)
-#endif
-
-#define FATAL_PRINTF(...)               \
-    do                                  \
-    {                                   \
-        fprintf(stderr, __VA_ARGS__);   \
-        exit(1);                        \
-    } while(false)
-
-/*
-#define SDL_TRY_CALL(f, ...)            \
-    do                                  \
-    {                                   \
-        if (f(__VA_ARGS__))             \
-        {                               \
-            FATAL_PRINTF("SDL Error: %s\n", SDL_GetError());
-        }                       \
-    } while(false)
-*/
+#include"game_starter.h"
 
 // large alloc and free
 #ifdef _WIN32
@@ -56,13 +23,10 @@
 
 static_assert(CHAR_BIT == 8, "char not 8 bits");
 
-struct sdl_offscreen_buffer
+struct BufferedTexture
 {
     SDL_Texture* texture;
-    void* pixels;
-    int width;
-    int height;
-    int pitch;
+    OffscreenBuffer buffer;
 };
 
 struct GameKeyboardState
@@ -88,7 +52,7 @@ static SDL_Window* window = NULL;
 static SDL_Renderer* renderer = NULL;
 static const int BYTES_PER_PIXEL = 4;
 
-static sdl_offscreen_buffer screen_buffer;
+static BufferedTexture buffered_texture;
 
 // Audio stuff
 static const int AUDIO_SAMPLES_PER_SECOND = 48000;
@@ -118,6 +82,9 @@ static GameKeyboardState game_keyboard_state{};
 // Timer stuff
 static double target_frame_ms = 16.66666;
 
+// Game stuff
+static GameState game_state;
+
 
 int clamp(int val, int lo, int hi) {
     if (val < lo) return lo;
@@ -125,90 +92,15 @@ int clamp(int val, int lo, int hi) {
     return val;
 }
 
-static void render_gradient_to_buffer(sdl_offscreen_buffer* buffer, int x_offset, int y_offset)
+static void render_offscreen_buffer(BufferedTexture* b)
 {
-    DEBUG_ASSERT(buffer->pixels);
+    DEBUG_ASSERT(b->texture);
 
-    int width = buffer->width;
-    int height = buffer->height;
-    int pitch = buffer->pitch;
-    uint8_t* row = (uint8_t*)buffer->pixels;
-
-    for (int r = 0; r < height; ++r)
-    {
-        uint8_t * byte = row;
-        for (int c = 0; c < width; ++c)
-        {
-            // little endian
-            // B
-            *byte = (uint8_t)(c + x_offset);
-            byte++;
-
-            // G
-            *byte = (uint8_t)(r + y_offset);
-            byte++;
-
-            // R
-            *byte = 0x00;
-            byte++;
-
-            // padding byte
-            //*byte = 0x00;
-            byte++;
-        }
-        row += pitch;
-    }
-}
-
-static void render_offscreen_buffer(sdl_offscreen_buffer* buffer)
-{
-    DEBUG_ASSERT(buffer->texture);
-
-    SDL_UpdateTexture(buffer->texture, NULL, buffer->pixels, buffer->pitch);
+    SDL_UpdateTexture(b->texture, NULL, b->buffer.pixels, b->buffer.pitch);
     // this will stretch the texture to the render target if necessary, using bilinear interpolation
-    SDL_RenderCopy(renderer, buffer->texture, NULL, NULL);
+    SDL_RenderCopy(renderer, b->texture, NULL, NULL);
 }
 
-static sdl_offscreen_buffer create_offscreen_buffer(int width, int height)
-{
-    sdl_offscreen_buffer buffer{};
-
-    buffer.pitch = width * BYTES_PER_PIXEL;
-    buffer.width = width;
-    buffer.height = height;
-
-    buffer.texture = SDL_CreateTexture(
-        renderer,
-        SDL_PIXELFORMAT_ARGB8888,
-        SDL_TEXTUREACCESS_STREAMING,
-        width,
-        height);
-
-    if(buffer.texture == NULL)
-    {
-        FATAL_PRINTF("Window could not be created - SDL_Error: %s\n", SDL_GetError());
-    }
-
-    buffer.pixels = LARGE_ALLOC(height * buffer.pitch);
-    if(buffer.pixels == NULL)
-    {
-        FATAL_PRINTF("Couldn't allocate pixels buffer");
-    }
-
-    return buffer;
-}
-
-static void free_offscreen_buffer(sdl_offscreen_buffer* buffer)
-{
-    if (buffer->texture)
-    {
-        SDL_DestroyTexture(buffer->texture);
-    }
-    if (buffer->pixels)
-    {
-        LARGE_FREE(buffer->pixels, buffer->height * buffer->pitch);
-    }
-}
 
 static void add_controller(int joystick_index) {
     if (!SDL_IsGameController(joystick_index))
@@ -369,6 +261,7 @@ static void audio_sine_wave(void * buffer, int buffer_size)
 
 int main(int argc, char* args[])
 {
+
     int width = 800;
     int height = 600;
 
@@ -378,7 +271,8 @@ int main(int argc, char* args[])
         FATAL_PRINTF("SDL couldn't be initialized - SDL_Error: %s\n", SDL_GetError());
     }
 
-    // Create Window
+    // Create Window and Renderer
+
     window = SDL_CreateWindow(
         "Game",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
@@ -390,7 +284,6 @@ int main(int argc, char* args[])
         FATAL_PRINTF("Window could not be created - SDL_Error: %s\n", SDL_GetError());
     }
 
-    // Create Renderer
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
     if(renderer == NULL)
@@ -399,6 +292,7 @@ int main(int argc, char* args[])
     }
 
     // Get initially plugged in controllers
+
     int num_joysticks = SDL_NumJoysticks();
     for (int joy_index = 0; joy_index < num_joysticks; ++joy_index)
     {
@@ -407,7 +301,30 @@ int main(int argc, char* args[])
     DEBUG_PRINTF("Found %d game controllers\n", num_controllers);
 
     // Initialize rendering buffer
-    screen_buffer = create_offscreen_buffer(width, height);
+
+    OffscreenBuffer buffer{};
+
+    buffer.pitch = width * BYTES_PER_PIXEL;
+    buffer.width = width;
+    buffer.height = height;
+    buffer.pixels = LARGE_ALLOC(height * buffer.pitch);
+    if(buffer.pixels == NULL)
+    {
+        FATAL_PRINTF("Couldn't allocate pixels buffer");
+    }
+
+    buffered_texture.buffer = buffer;
+    buffered_texture.texture = SDL_CreateTexture(
+        renderer,
+        SDL_PIXELFORMAT_ARGB8888,
+        SDL_TEXTUREACCESS_STREAMING,
+        width,
+        height);
+
+    if(buffered_texture.texture == NULL)
+    {
+        FATAL_PRINTF("Window could not be created - SDL_Error: %s\n", SDL_GetError());
+    }
 
     // Initialize audio
 
@@ -473,7 +390,9 @@ int main(int argc, char* args[])
 
 
     // Now do the game loop
-    running = true;
+    game_state.x_offset = 0;
+    game_state.y_offset = 0;
+    game_state.running = true;
 
     // input and gradient scroll stuff
     SDL_Event e;
@@ -493,7 +412,7 @@ int main(int argc, char* args[])
     // timer
     uint64_t frame_start_time = SDL_GetPerformanceCounter();
 
-    while(running)
+    while(game_state.running)
     {
         
         while (SDL_PollEvent(&e))
@@ -533,8 +452,8 @@ int main(int argc, char* args[])
         SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
         SDL_RenderClear(renderer);
 
-        render_gradient_to_buffer(&screen_buffer, x_offset, y_offset);
-        render_offscreen_buffer(&screen_buffer);
+        game_update_and_render(&buffered_texture.buffer, &game_state);
+        render_offscreen_buffer(&buffered_texture);
 
         SDL_RenderPresent(renderer);
 
