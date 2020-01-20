@@ -332,22 +332,21 @@ static void audio_callback(void* user_data, uint8_t* audio_data, int length)
 }
 
 // return the modified new wave offset
-static int audio_sine_wave(
+static double audio_sine_wave(
     // buffer size in bytes; must be a multiple of sample size
     void * buffer, int buffer_size,
     // TODO allow audio channels to have different amplitudes/offsets... etc
     int16_t amplitude,
     // period and offset are in number of samples
-    int wave_hz, int wave_offset)
+    int wave_hz, double t_sine)
 {
     DEBUG_ASSERT(buffer_size % BYTES_PER_AUDIO_SAMPLE == 0);
     // how many samples per full wave
     int wave_period = AUDIO_FREQ / wave_hz;
-    // frequency as a float, to stretch the wave out to the correct period
-    double real_freq = 1.0 / (double)wave_period;
-    // multiply by 2*PI so the base period is 1.0, then multiply by the period we want
-    double offset_coefficient = 2.0 * M_PI * real_freq;
     int num_samples = buffer_size / BYTES_PER_AUDIO_SAMPLE;
+    // one sample's worth for this period
+    // I DONT HAVE GREAT INTUITION ON THIS
+    double t_sine_inc = 2.0 * M_PI * 1.0 / (double)wave_period;
 
     int16_t* curr_sample = (int16_t*)buffer;
 
@@ -355,14 +354,14 @@ static int audio_sine_wave(
 
         for (int ch = 0; ch < NUM_AUDIO_CHANNELS; ++ch)
         {
-            *curr_sample = (int16_t)((double)amplitude * sin(offset_coefficient * (double)wave_offset));
+            *curr_sample = (int16_t)((double)amplitude * sin(t_sine));
             curr_sample++;
         }
 
-        wave_offset = (wave_offset + 1) % wave_period;
+        t_sine += t_sine_inc;
     }
 
-    return wave_offset;
+    return t_sine;
 }
 
 
@@ -480,9 +479,9 @@ int main(int argc, char* args[])
     // sample is 16 bits times number of channels
     const int bytes_per_sample = sizeof(int16_t) * audio_settings.channels;
     // 2 seconds of samples
-    const int num_samples_in_ring_buffer = audio_settings.freq * 2;
+    const int num_samples_in_ring_buffer = audio_settings.freq;
 
-    int wave_offset = 0;
+    double t_sine = 0.0;
     int16_t wave_amplitude = MIDDLE_VOLUME_AMPLITUDE;
     int wave_hz = MIDDLE_C_FREQ;
 
@@ -511,7 +510,7 @@ int main(int argc, char* args[])
         // fill ring buffer with silence
         //memset(audio_ring_buffer.data, audio_settings.silence, audio_ring_buffer.size);
         // fill ring buffer with square wave
-        wave_offset = audio_sine_wave(audio_ring_buffer.data, audio_ring_buffer.size, wave_amplitude, wave_hz, wave_offset);
+        t_sine = audio_sine_wave(audio_ring_buffer.data, audio_ring_buffer.size, wave_amplitude, wave_hz, t_sine);
 
     }
     // Unlock the callback
@@ -532,7 +531,8 @@ int main(int argc, char* args[])
     const int MAX_SCROLL_SPEED = 5;
 
     // audio stuff
-    const int MAX_FREQ_OFFSET = 50;
+    const int MIN_HZ = 20;
+    const int MAX_HZ = 256*2;
     const int MAX_VOLUME_OFFSET = 300;
 
     while(running)
@@ -562,7 +562,14 @@ int main(int argc, char* args[])
         x_offset += x_vel;
         y_offset += y_vel;
         // change freq & volume of wave
-        wave_hz = MIDDLE_C_FREQ + (int16_t)((double)MAX_FREQ_OFFSET * (double)stick_y / 32767.0);
+        if (stick_y >= 0)
+        {
+            wave_hz = MIDDLE_C_FREQ + (int16_t)((double)MAX_HZ * (double)stick_y / 32767.0);
+        }
+        else if (stick_y < 0)
+        {
+            wave_hz = MIN_HZ + (int16_t)((double)(MIDDLE_C_FREQ - MIN_HZ) * (((double)stick_y / 32767.0) + 1.0));
+        }
         wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((double)MAX_VOLUME_OFFSET * (double)stick_x / 32767.0);
 
         SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
@@ -581,8 +588,8 @@ int main(int argc, char* args[])
         SDL_LockAudioDevice(audio_device_id);
         if (audio_ring_buffer.write_index != audio_ring_buffer.play_index)
         {
-
-
+            DEBUG_ASSERT(audio_ring_buffer.write_index % BYTES_PER_AUDIO_SAMPLE == 0);
+            DEBUG_ASSERT(audio_ring_buffer.play_index % BYTES_PER_AUDIO_SAMPLE == 0);
             // get region/s to fill (2 cases because of circular buffer)
             int region_size_1, region_size_2;
             //int bytes_played_since_last;    // this is generally the size of the sdl internal buffer
@@ -600,10 +607,10 @@ int main(int argc, char* args[])
 
             void* region = (void*)&((int8_t*)audio_ring_buffer.data)[audio_ring_buffer.write_index];
 
-            wave_offset = audio_sine_wave(region, region_size_1, wave_amplitude, wave_hz, wave_offset);
+            t_sine = audio_sine_wave(region, region_size_1, wave_amplitude, wave_hz, t_sine);
             if (region_size_2)
             {
-                wave_offset = audio_sine_wave(audio_ring_buffer.data, region_size_2, wave_amplitude, wave_hz, wave_offset);
+                t_sine = audio_sine_wave(audio_ring_buffer.data, region_size_2, wave_amplitude, wave_hz, t_sine);
             }
 
             audio_ring_buffer.write_index = (audio_ring_buffer.write_index + region_size_1 + region_size_2) % audio_ring_buffer.size;
