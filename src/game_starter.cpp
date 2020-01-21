@@ -159,6 +159,21 @@ void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffe
             game_state->wave_hz = MIN_HZ + (int16_t)((double)(MIDDLE_C_FREQ - MIN_HZ) * ((left_stick_y + 1.0)/2.0));
         }
         game_state->wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((double)MAX_VOLUME_OFFSET * left_stick_x);
+
+        // test debug IO
+        if (controller->a.pressed)
+        {
+            DEBUG_platform_write_entire_file("test_file", (void*)"testIO\0", 7);
+            DEBUG_PRINTF("wrote a file called \"test_file\"\n");
+        }
+        if (controller->b.pressed)
+        {
+            int64_t size;
+            void* buf = DEBUG_platform_read_entire_file("test_file", &size);
+            DEBUG_ASSERT(size == 7);
+            DEBUG_PRINTF("read a file containing \"%s\"\n", (char*)buf);
+            DEBUG_platform_free_file_memory(buf);
+        }
     }
     else
     {
