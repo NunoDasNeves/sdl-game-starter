@@ -38,12 +38,29 @@ static SDL_Window* window = NULL;
 static SDL_Renderer* renderer = NULL;
 static SDL_Texture* texture = NULL;
 static const int BYTES_PER_PIXEL = 4;
+// TODO dynamic or adjustable
+static int target_framerate = 60;
+// TODO recompute based on framerate
+static double target_frame_ms = 1000.0/(double)target_framerate;
 
 // Audio stuff
+// TODO BUG/weird issues - audio skips during some OS interactions; holding on window X, typing in search box...arg
+// From cursory research, it seems to be okay to lag anywhere from 3-9 frames before audio latency is noticeable
+// However we still want to minimize it without causing skips etc
+
+// current latency is only a frame or two! pretty good
+
 static const int AUDIO_SAMPLES_PER_SECOND = 48000;
-static const int SDL_AUDIO_BUFFER_SAMPLES = 512;
-static const int AUDIO_RING_BUFFER_NUM_SAMPLES = AUDIO_SAMPLES_PER_SECOND;
-static const int AUDIO_LATENCY_SAMPLES_AHEAD = AUDIO_SAMPLES_PER_SECOND / 15;
+
+// TODO this number is pretty crucial
+// if it's too low, the audio callback has to run very frequently, blocking the main loop
+// if it's too high, the callback runs less frequently and the play index is less accurate
+// it should possibly be tuned at startup, or even at runtime? (have to close and open the audio device)
+// e.g. 512 means that the play cursor updates every 10ms
+// To mitigate this we take averages of stuff
+static const int SDL_AUDIO_BUFFER_SAMPLES = 256;    // must be power of 2
+static const int AUDIO_RING_BUFFER_SIZE_SAMPLES = AUDIO_SAMPLES_PER_SECOND;
+static const int APPROX_AUDIO_SAMPLES_PER_FRAME = AUDIO_SAMPLES_PER_SECOND / target_framerate;
 static const int NUM_AUDIO_CHANNELS = 2;
 static const int AUDIO_SAMPLE_SIZE = (AUDIO_S16SYS & SDL_AUDIO_MASK_BITSIZE) / BITS_PER_BYTE; //in bytes
 static const int BYTES_PER_AUDIO_SAMPLE = AUDIO_SAMPLE_SIZE * NUM_AUDIO_CHANNELS;
@@ -55,9 +72,6 @@ static AudioRingBuffer audio_ring_buffer{};
 // Input stuff
 static int num_controllers = 0;
 static SDL_GameController* controller_handles[MAX_CONTROLLERS];
-
-// Timer stuff
-static double target_frame_ms = 16.66666;
 
 // Stuff passed to game
 static GameRenderBuffer game_render_buffer{};
@@ -425,7 +439,7 @@ int main(int argc, char* args[])
         DEBUG_PRINTF("SDL audio buffer size: %d\n", audio_settings.size);
 
         // initialize ring buffer to 1 second
-        audio_ring_buffer.size = BYTES_PER_AUDIO_SAMPLE * AUDIO_RING_BUFFER_NUM_SAMPLES;
+        audio_ring_buffer.size = BYTES_PER_AUDIO_SAMPLE * AUDIO_RING_BUFFER_SIZE_SAMPLES;
         DEBUG_ASSERT((int)audio_settings.size <= audio_ring_buffer.size);
 
         audio_ring_buffer.write_index = 0;
@@ -476,8 +490,21 @@ int main(int argc, char* args[])
     // timer
     uint64_t frame_start_time = SDL_GetPerformanceCounter();
 
+
+    // Use this to compute how far ahead we should write audio (also determines our audio latency)
+    const int SAMPLES_PER_FRAME_COUNT = 30;
+    int avg_samples_per_frame = APPROX_AUDIO_SAMPLES_PER_FRAME;                   // bootstrap; estimate/ideal
+    int avg_samples_since_start_of_frame = 0;
+    int play_sample_set_target = 0;
+    int play_sample_write_data = 0;
+
     while(running)
     {
+        // Get initial play cursor
+        SDL_LockAudioDevice(audio_device_id);
+        int play_sample_init = audio_ring_buffer.play_index / BYTES_PER_AUDIO_SAMPLE;
+        SDL_UnlockAudioDevice(audio_device_id);
+
         // Input
         // advance game input buffer, and clear next entry
         game_input_buffer.last = (game_input_buffer.last + 1) % INPUT_BUFFER_SIZE;
@@ -486,7 +513,6 @@ int main(int argc, char* args[])
         game_input_buffer.buffer[game_input_buffer.last].keyboard = \
             game_input_buffer.buffer[(game_input_buffer.last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard;
         
-
         while (SDL_PollEvent(&e))
         {
             handle_event(&e);
@@ -497,21 +523,54 @@ int main(int argc, char* args[])
         SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);
         SDL_RenderClear(renderer);
 
-        // Fill next part of audio buffer with sound, up to the play cursor + a bit ahead
-        // need to make 1 assumption: we can write 'a bit ahead' faster than it can be played
-        // hence, write index is always considered ahead of play index
-        // i.e. play index shouldn't completely loop write index; writing should always be able to catch up even if it gets behind
-        // for final code we need to ensure that this never happens however; it will cause an audible skip
+        /*
+         *  How audio works (lots of buffers)
+         *  - In this loop:
+         *      - We figure out how far ahead we need to write so the audio doesn't skip
+         *      - Game code fills a sound buffer
+         *      - We copy it to the ring buffer
+         *  - In SDL's callback function (run in another thread), we copy from the ring buffer to SDL's internal buffer
+         *  - SDL copies to the platform's sound buffer
+         * 
+         *  We need to tell the game code to give us more than 1 frame of sound, or there could be skips!
+         * 
+         *  Frame timeline 
+         * 
+         * |----------------------------------------------|----------------------------------------------|
+         *     ^ |---(get sound from game)---| ^                ^                          ^
+         *  set target                    write data        set target                  write data
+         *                                                                  (need to get here before play catches up) 
+         * 
+         *  We need to ask the game for enough sound data to get us to the end of the next frame
+         *  So, starting at set target, we need to set our target at the end of the next frame
+         *  This is just 2 frames minus the first bit of the frame before set target
+         *  We use rolling exponentially weighted averages of the number of samples between each frame to hopefully make it more accurate
+         */
 
+        // Set audio target
         SDL_LockAudioDevice(audio_device_id);
-        // we want to write AUDIO_LATENCY_SAMPLES_AHEAD (samples ahead) of the play cursor
-        int target_index = (audio_ring_buffer.play_index + AUDIO_LATENCY_SAMPLES_AHEAD * BYTES_PER_AUDIO_SAMPLE) % audio_ring_buffer.size;
+        int new_play_sample_set_target = audio_ring_buffer.play_index / BYTES_PER_AUDIO_SAMPLE;
         SDL_UnlockAudioDevice(audio_device_id);
-        int region_size_1 = 0, region_size_2 = 0;
 
-        DEBUG_ASSERT(audio_ring_buffer.play_index % BYTES_PER_AUDIO_SAMPLE == 0);
-        DEBUG_ASSERT(audio_ring_buffer.write_index % BYTES_PER_AUDIO_SAMPLE == 0);
-        DEBUG_ASSERT(target_index % BYTES_PER_AUDIO_SAMPLE == 0);
+        int samples_since_last_frame_set_target = DIST_IN_RING_BUFFER(play_sample_set_target, new_play_sample_set_target, AUDIO_RING_BUFFER_SIZE_SAMPLES);
+        int samples_since_start_of_frame = DIST_IN_RING_BUFFER(play_sample_init, new_play_sample_set_target, AUDIO_RING_BUFFER_SIZE_SAMPLES);
+        avg_samples_since_start_of_frame = (int)EXP_WEIGHTED_AVG(avg_samples_since_start_of_frame, SAMPLES_PER_FRAME_COUNT, samples_since_start_of_frame);
+
+        play_sample_set_target = new_play_sample_set_target;
+
+        // 2 frames minus any samples from the start of this frame, plus one sdl buffer size for safety
+        // TODO extra SDL buffer here is probably not needed
+        int target_samples_ahead = (avg_samples_per_frame * 2 - avg_samples_since_start_of_frame) + SDL_AUDIO_BUFFER_SAMPLES;
+
+        //DEBUG_PRINTF("avg samples in frame %d\n", avg_samples_per_frame);
+        //DEBUG_PRINTF("avg samples since start of frame: %d\n", avg_samples_since_start_of_frame);
+        //DEBUG_PRINTF("target samples ahead: %d\n", target_samples_ahead);
+        int rem = target_samples_ahead % SDL_AUDIO_BUFFER_SAMPLES;
+        target_samples_ahead += (SDL_AUDIO_BUFFER_SAMPLES - rem);
+
+        int target_index = ((play_sample_set_target + target_samples_ahead) * BYTES_PER_AUDIO_SAMPLE) % audio_ring_buffer.size;
+        // round to multiple of sdl buffer size
+        int region_size_1 = 0, region_size_2 = 0;
 
         // get region/s to fill (2 cases because of circular buffer)
         if (audio_ring_buffer.write_index <= target_index)
@@ -526,27 +585,42 @@ int main(int argc, char* args[])
         }
 
         game_sound_buffer.buffer_size = region_size_1 + region_size_2;
-        //DEBUG_PRINTF("%d\n", game_sound_buffer.buffer_size);
+        //DEBUG_PRINTF("game sound buffer samples size %d\n", game_sound_buffer.buffer_size / BYTES_PER_AUDIO_SAMPLE);
 
+        // Call the game code
         game_update_and_render(game_memory, &game_input_buffer, &game_render_buffer, &game_sound_buffer);
 
-        if (game_sound_buffer.buffer_size)
+        // Write audio data to the ring buffer
+        SDL_LockAudioDevice(audio_device_id);
         {
-            SDL_LockAudioDevice(audio_device_id);
+            int new_play_sample_write_data = audio_ring_buffer.play_index / BYTES_PER_AUDIO_SAMPLE;
+            int samples_since_last_frame_write_data = DIST_IN_RING_BUFFER(play_sample_write_data, new_play_sample_write_data, AUDIO_RING_BUFFER_SIZE_SAMPLES);
 
-            void* region = (void*)&((int8_t*)audio_ring_buffer.data)[audio_ring_buffer.write_index];
+            // avg of this frame
+            double avg_this_frame = ((double)samples_since_last_frame_set_target + (double)samples_since_last_frame_write_data) / 2.0;
+            // exponentially weighted rolling average
+            avg_samples_per_frame = (int)EXP_WEIGHTED_AVG(avg_samples_per_frame, SAMPLES_PER_FRAME_COUNT, avg_this_frame);
 
-            memcpy(region, game_sound_buffer.buffer, region_size_1);
-            if (region_size_2)
+            play_sample_write_data = new_play_sample_write_data;
+
+            if (game_sound_buffer.buffer_size)
             {
-                memcpy(audio_ring_buffer.data, (void*)&((int8_t*)game_sound_buffer.buffer)[region_size_1], region_size_2);
+
+                void* region = (void*)&((int8_t*)audio_ring_buffer.data)[audio_ring_buffer.write_index];
+
+                memcpy(region, game_sound_buffer.buffer, region_size_1);
+                if (region_size_2)
+                {
+                    memcpy(audio_ring_buffer.data, (void*)&((int8_t*)game_sound_buffer.buffer)[region_size_1], region_size_2);
+                }
+
+                audio_ring_buffer.write_index = (audio_ring_buffer.write_index + region_size_1 + region_size_2) % audio_ring_buffer.size;
+
             }
-
-            audio_ring_buffer.write_index = (audio_ring_buffer.write_index + region_size_1 + region_size_2) % audio_ring_buffer.size;
-
-            SDL_UnlockAudioDevice(audio_device_id);
         }
+        SDL_UnlockAudioDevice(audio_device_id);
 
+        // Actually render to the screen
         render_offscreen_buffer(&game_render_buffer);
         SDL_RenderPresent(renderer);
         

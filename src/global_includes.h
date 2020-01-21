@@ -11,6 +11,13 @@ static_assert(CHAR_BIT == 8, "Char must be 8 bits");
 
 #define sizeofarray(arr) (sizeof(arr) / sizeof((arr)[0]))
 
+// distance between a 'prev' and 'curr' index in a ring buffer
+#define DIST_IN_RING_BUFFER(prev, curr, size) (((prev) > (curr) ? (curr) + (size) : (curr)) - (prev))
+
+#define MAX(X, Y) ((X) >= (Y) ? (X) : (Y))
+#define MIN(X, Y) ((X) <= (Y) ? (X) : (Y))
+#define EXP_WEIGHTED_AVG(avg, N, new_sample) (((double)(avg) - (double)(avg)/(double)(N)) + (double)(new_sample)/(double)(N))
+
 #define BITS_PER_BYTE 8
 
 // Technically correct...the best kind of correct!
