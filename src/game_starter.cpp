@@ -136,7 +136,7 @@ void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffe
     if (keyboard->left.pressed && !keyboard->right.pressed) {
         x_vel = -MAX_SCROLL_SPEED;
     } else if (keyboard->right.pressed && !keyboard->left.pressed) {
-        x_vel = +MAX_SCROLL_SPEED;
+        x_vel = MAX_SCROLL_SPEED;
     }
     if (controller)
     {
@@ -147,8 +147,6 @@ void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffe
         // TODO replace with Vector2; this doesn't work properly because the vector length must be clamped, not x and y individually
         x_vel = clamp((int)(left_stick_x * (double)MAX_SCROLL_SPEED) + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
         y_vel = clamp((int)(left_stick_y * (double)MAX_SCROLL_SPEED) + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
-        game_state->x_offset += x_vel;
-        game_state->y_offset += y_vel;
         // change freq & volume of wave
         if (left_stick_y >= 0.0)
         {
@@ -180,6 +178,9 @@ void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffe
         game_state->wave_hz = MIDDLE_C_FREQ;
         game_state->wave_amplitude = MIDDLE_VOLUME_AMPLITUDE;
     }
+
+    game_state->x_offset += x_vel;
+    game_state->y_offset += y_vel;
 
     output_sine_wave(sound_buffer, game_state->wave_hz, game_state->wave_amplitude);
     render_gradient_to_buffer(render_buffer, game_state->x_offset, game_state->y_offset);
