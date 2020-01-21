@@ -396,9 +396,9 @@ int main(int argc, char* args[])
     SDL_UnlockAudioDevice(audio_device_id);
 
     // Initialize game state, sound, input
-    game_memory.memory_size = GIGABYTES(1);
+    game_memory.memory_size = GIBIBYTES(1);
 #ifdef FIXED_GAME_MEMORY
-    game_memory.memory = LARGE_ALLOC_FIXED(game_memory.memory_size, TERABYTES(2));
+    game_memory.memory = LARGE_ALLOC_FIXED(game_memory.memory_size, TEBIBYTES(2));
 #else
     game_memory.memory = LARGE_ALLOC(game_memory.memory_size);
 #endif
