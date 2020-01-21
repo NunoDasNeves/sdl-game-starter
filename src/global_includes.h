@@ -13,8 +13,13 @@ static_assert(CHAR_BIT == 8, "Char must be 8 bits");
 
 #define BITS_PER_BYTE 8
 
+#define KILOBYTES(X) (((uint64_t)X) * 1024)
+#define MEGABYTES(X) (KILOBYTES((uint64_t)X) * 1024)
+#define GIGABYTES(X) (MEGABYTES((uint64_t)X) * 1024)
+#define TERABYTES(X) (GIGABYTES((uint64_t)X) * 1024)
+
 // TODO put these kind of defines in a header unless platform-specific
-#ifdef CONSOLE_DEBUG
+#ifdef STDOUT_DEBUG
 #define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
 #define DEBUG_ASSERT(E) assert(E)
 #else

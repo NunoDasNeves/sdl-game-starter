@@ -75,6 +75,7 @@ struct KeyboardInput
 
 struct GameInput
 {
+    // TODO pass time elapsed since last frame
     KeyboardInput keyboard;
     int num_controllers;
     ControllerInput controllers[MAX_CONTROLLERS];
@@ -89,7 +90,15 @@ struct GameInputBuffer
     GameInput buffer[INPUT_BUFFER_SIZE];
 };
 
-void game_update_and_render(GameInputBuffer* input_buffer, OffscreenBuffer* offscreen_buffer, SoundBuffer* sound_buffer, GameState* game_state);
+struct GameMemory
+{
+    unsigned memory_size;
+    void* memory;
+};
+
+void init_game_memory(GameMemory game_memory);
+
+void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffer, OffscreenBuffer* offscreen_buffer, SoundBuffer* sound_buffer);
 
 
 #define GAME_STARTER_H

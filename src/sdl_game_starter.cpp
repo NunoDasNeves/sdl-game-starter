@@ -12,12 +12,14 @@
 
 // large alloc and free
 #ifdef _WIN32
-#define LARGE_ALLOC(X) VirtualAlloc(NULL, X, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
-#define LARGE_FREE(X,Y) DEBUG_ASSERT(VirtualFree(X, 0, MEM_RELEASE))
+#define LARGE_ALLOC(SZ) VirtualAlloc(NULL, SZ, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
+#define LARGE_ALLOC_FIXED(SZ, ADDR) VirtualAlloc((LPVOID)ADDR, SZ, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
+#define LARGE_FREE(PTR,SZ) DEBUG_ASSERT(VirtualFree(PTR, 0, MEM_RELEASE))
 #endif
 #ifdef __linux__
-// NOT TESTED
 #define LARGE_ALLOC(X) mmap(NULL, X, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0)
+// TODO fixed alloc on linux
+#define LARGE_ALLOC_FIXED(SZ, ADDR) LARGE_ALLOC(SZ)
 #define LARGE_FREE(X,Y) munmap(X, Y)
 #endif
 
@@ -64,8 +66,9 @@ static SDL_GameController* controller_handles[MAX_CONTROLLERS];
 static double target_frame_ms = 16.66666;
 
 // Game stuff
+bool running = true;
 static SoundBuffer sound_buffer{};
-static GameState game_state{};
+static GameMemory game_memory{};
 static GameInputBuffer game_input_buffer{};
 
 
@@ -99,7 +102,7 @@ static void handle_event(SDL_Event* e)
     switch(e->type)
     {
         case SDL_QUIT:
-            game_state.running = false;
+            running = false;
             break;
 
         case SDL_WINDOWEVENT:
@@ -352,11 +355,18 @@ int main(int argc, char* args[])
     SDL_UnlockAudioDevice(audio_device_id);
 
     // Initialize game state, sound, input
-    game_state.wave_amplitude = 0;
-    game_state.wave_hz = 0;
-    game_state.x_offset = 0;
-    game_state.y_offset = 0;
-    game_state.running = true;
+    game_memory.memory_size = GIGABYTES(1);
+#ifdef FIXED_GAME_MEMORY
+    game_memory.memory = LARGE_ALLOC_FIXED(game_memory.memory_size, TERABYTES(2));
+#else
+    game_memory.memory = LARGE_ALLOC(game_memory.memory_size);
+#endif
+
+    if (!game_memory.memory)
+    {
+        FATAL_PRINTF("Couldn't allocate game memory\n");
+    }
+    init_game_memory(game_memory);
 
     sound_buffer.buffer_size = AUDIO_SAMPLES_PER_SECOND * BYTES_PER_AUDIO_SAMPLE;
     sound_buffer.buffer = LARGE_ALLOC(sound_buffer.buffer_size);
@@ -376,13 +386,13 @@ int main(int argc, char* args[])
     // timer
     uint64_t frame_start_time = SDL_GetPerformanceCounter();
 
-    while(game_state.running)
+    while(running)
     {
         // Input
         // advance game input buffer, and clear next entry
         game_input_buffer.last = (game_input_buffer.last + 1) % INPUT_BUFFER_SIZE;
         memset(&game_input_buffer.buffer[game_input_buffer.last], 0, sizeof(GameInput));
-        // copy previous keyboard state (otherwise keys only fire on each keyboard event, OS repeat rate issue etc)
+        // copy previous keyboard state (otherwise keys only fire on each keyboard event bounded by OS repeat rate)
         game_input_buffer.buffer[game_input_buffer.last].keyboard = \
             game_input_buffer.buffer[(game_input_buffer.last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard;
         
@@ -428,7 +438,7 @@ int main(int argc, char* args[])
         sound_buffer.buffer_size = region_size_1 + region_size_2;
         //DEBUG_PRINTF("%d\n", sound_buffer.buffer_size);
 
-        game_update_and_render(&game_input_buffer, &buffered_texture.buffer, &sound_buffer, &game_state);
+        game_update_and_render(game_memory, &game_input_buffer, &buffered_texture.buffer, &sound_buffer);
 
         if (sound_buffer.buffer_size)
         {

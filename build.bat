@@ -4,7 +4,7 @@ set NAME=sdl_game_starter.exe
 set SDL_DIR=C:\SDL2-2.0.10
 
 :: Debug messages etc
-set ADDITIONAL_FLAGS=/DCONSOLE_DEBUG
+set ADDITIONAL_FLAGS=/DSTDOUT_DEBUG /DFIXED_GAME_MEMORY
 
 :: Disabled warnings
 :: /wd4100  unreferenced formal parameter

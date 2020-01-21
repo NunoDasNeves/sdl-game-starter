@@ -81,9 +81,24 @@ static void render_gradient_to_buffer(OffscreenBuffer* buffer, int x_offset, int
     }
 }
 
-
-void game_update_and_render(GameInputBuffer* input_buffer, OffscreenBuffer* offscreen_buffer, SoundBuffer* sound_buffer, GameState* game_state)
+void init_game_memory(GameMemory game_memory)
 {
+    DEBUG_ASSERT(game_memory.memory_size >= sizeof(GameState));
+
+    // TODO partition memory etc
+    GameState* game_state = (GameState*)game_memory.memory;
+
+    // initialize game state etc
+    game_state->wave_amplitude = 0;
+    game_state->wave_hz = 0;
+    game_state->x_offset = 0;
+    game_state->y_offset = 0;
+}
+
+void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffer, OffscreenBuffer* offscreen_buffer, SoundBuffer* sound_buffer)
+{
+
+    GameState* game_state = (GameState*)game_memory.memory;
 
     int x_vel = 0;
     int y_vel = 0;
