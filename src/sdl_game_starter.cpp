@@ -23,13 +23,6 @@
 #define LARGE_FREE(X,Y) munmap(X, Y)
 #endif
 
-
-struct BufferedTexture
-{
-    SDL_Texture* texture;
-    OffscreenBuffer buffer;
-};
-
 struct AudioRingBuffer
 {
     int size;
@@ -38,12 +31,13 @@ struct AudioRingBuffer
     void* data;
 };
 
+static bool running = true;
+
 // Rendering stuff
 static SDL_Window* window = NULL;
 static SDL_Renderer* renderer = NULL;
+static SDL_Texture* texture = NULL;
 static const int BYTES_PER_PIXEL = 4;
-
-static BufferedTexture buffered_texture;
 
 // Audio stuff
 static const int AUDIO_SAMPLES_PER_SECOND = 48000;
@@ -65,20 +59,20 @@ static SDL_GameController* controller_handles[MAX_CONTROLLERS];
 // Timer stuff
 static double target_frame_ms = 16.66666;
 
-// Game stuff
-bool running = true;
-static SoundBuffer sound_buffer{};
+// Stuff passed to game
+static GameRenderBuffer game_render_buffer{};
+static GameSoundBuffer game_sound_buffer{};
 static GameMemory game_memory{};
 static GameInputBuffer game_input_buffer{};
 
 
-static void render_offscreen_buffer(BufferedTexture* b)
+static void render_offscreen_buffer(GameRenderBuffer* b)
 {
-    DEBUG_ASSERT(b->texture);
+    DEBUG_ASSERT(texture);
 
-    SDL_UpdateTexture(b->texture, NULL, b->buffer.pixels, b->buffer.pitch);
+    SDL_UpdateTexture(texture, NULL, b->pixels, b->pitch);
     // this will stretch the texture to the render target if necessary, using bilinear interpolation
-    SDL_RenderCopy(renderer, b->texture, NULL, NULL);
+    SDL_RenderCopy(renderer, texture, NULL, NULL);
 }
 
 
@@ -91,8 +85,52 @@ static void add_controller(int joystick_index) {
     {
         return;
     }
-    controller_handles[num_controllers] = SDL_GameControllerOpen(joystick_index);
-    num_controllers++;
+    bool success = false;
+    const char * error = "maximum number of controllers reached";
+    // find empty slot
+    for (int i = 0; i < MAX_CONTROLLERS; ++i)
+    {
+        if (!controller_handles[i])
+        {
+            controller_handles[i] = SDL_GameControllerOpen(joystick_index);
+            if (controller_handles[i])
+            {
+                num_controllers++;
+                success = true;
+            }
+            else
+            {
+                error = SDL_GetError();
+            }
+
+            break;
+        }
+    }
+    if (!success)
+    {
+        DEBUG_PRINTF("Tried to add controller, but failed: %s\n", error);
+    }
+}
+
+static void remove_controller(SDL_JoystickID joystick_id) {
+    if (num_controllers == 0)
+    {
+        return;
+    }
+    for (int i = 0; i < MAX_CONTROLLERS; ++i)
+    {
+        if (controller_handles[i])
+        {
+            SDL_JoystickID this_id = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller_handles[i]));
+            if (this_id == joystick_id)
+            {
+                SDL_GameControllerClose(controller_handles[i]);
+                controller_handles[i] = NULL;
+                num_controllers--;
+            }
+            break;
+        }
+    }
 }
 
 static void handle_event(SDL_Event* e)
@@ -122,6 +160,12 @@ static void handle_event(SDL_Event* e)
         case SDL_CONTROLLERDEVICEADDED:
         {
             add_controller(e->cdevice.which);
+            break;
+        }
+        case SDL_CONTROLLERDEVICEREMOVED:
+        {
+            remove_controller(e->cdevice.which);
+            break;
         }
         // TODO remove controller
         // TODO support text input as per: https://wiki.libsdl.org/Tutorials/TextInput
@@ -270,26 +314,23 @@ int main(int argc, char* args[])
 
     // Initialize rendering buffer
 
-    OffscreenBuffer buffer{};
-
-    buffer.pitch = width * BYTES_PER_PIXEL;
-    buffer.width = width;
-    buffer.height = height;
-    buffer.pixels = LARGE_ALLOC(height * buffer.pitch);
-    if(buffer.pixels == NULL)
+    game_render_buffer.pitch = width * BYTES_PER_PIXEL;
+    game_render_buffer.width = width;
+    game_render_buffer.height = height;
+    game_render_buffer.pixels = LARGE_ALLOC(height * game_render_buffer.pitch);
+    if(game_render_buffer.pixels == NULL)
     {
         FATAL_PRINTF("Couldn't allocate pixels buffer");
     }
 
-    buffered_texture.buffer = buffer;
-    buffered_texture.texture = SDL_CreateTexture(
+    texture = SDL_CreateTexture(
         renderer,
         SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING,
         width,
         height);
 
-    if(buffered_texture.texture == NULL)
+    if(texture == NULL)
     {
         FATAL_PRINTF("Window could not be created - SDL_Error: %s\n", SDL_GetError());
     }
@@ -366,17 +407,17 @@ int main(int argc, char* args[])
     {
         FATAL_PRINTF("Couldn't allocate game memory\n");
     }
-    init_game_memory(game_memory);
+    game_init_memory(game_memory);
 
-    sound_buffer.buffer_size = AUDIO_SAMPLES_PER_SECOND * BYTES_PER_AUDIO_SAMPLE;
-    sound_buffer.buffer = LARGE_ALLOC(sound_buffer.buffer_size);
-    if (!sound_buffer.buffer)
+    game_sound_buffer.buffer_size = AUDIO_SAMPLES_PER_SECOND * BYTES_PER_AUDIO_SAMPLE;
+    game_sound_buffer.buffer = LARGE_ALLOC(game_sound_buffer.buffer_size);
+    if (!game_sound_buffer.buffer)
     {
         FATAL_PRINTF("Couldn't allocate game sound buffer\n");
     }
-    sound_buffer.samples_per_second = audio_settings.freq;
-    sound_buffer.bytes_per_sample = BYTES_PER_AUDIO_SAMPLE;
-    sound_buffer.num_channels = NUM_AUDIO_CHANNELS;
+    game_sound_buffer.samples_per_second = audio_settings.freq;
+    game_sound_buffer.bytes_per_sample = BYTES_PER_AUDIO_SAMPLE;
+    game_sound_buffer.num_channels = NUM_AUDIO_CHANNELS;
 
     memset(&game_input_buffer, 0, sizeof(GameInputBuffer));
 
@@ -435,21 +476,21 @@ int main(int argc, char* args[])
             region_size_2 = target_index;
         }
 
-        sound_buffer.buffer_size = region_size_1 + region_size_2;
-        //DEBUG_PRINTF("%d\n", sound_buffer.buffer_size);
+        game_sound_buffer.buffer_size = region_size_1 + region_size_2;
+        //DEBUG_PRINTF("%d\n", game_sound_buffer.buffer_size);
 
-        game_update_and_render(game_memory, &game_input_buffer, &buffered_texture.buffer, &sound_buffer);
+        game_update_and_render(game_memory, &game_input_buffer, &game_render_buffer, &game_sound_buffer);
 
-        if (sound_buffer.buffer_size)
+        if (game_sound_buffer.buffer_size)
         {
             SDL_LockAudioDevice(audio_device_id);
 
             void* region = (void*)&((int8_t*)audio_ring_buffer.data)[audio_ring_buffer.write_index];
 
-            memcpy(region, sound_buffer.buffer, region_size_1);
+            memcpy(region, game_sound_buffer.buffer, region_size_1);
             if (region_size_2)
             {
-                memcpy(audio_ring_buffer.data, (void*)&((int8_t*)sound_buffer.buffer)[region_size_1], region_size_2);
+                memcpy(audio_ring_buffer.data, (void*)&((int8_t*)game_sound_buffer.buffer)[region_size_1], region_size_2);
             }
 
             audio_ring_buffer.write_index = (audio_ring_buffer.write_index + region_size_1 + region_size_2) % audio_ring_buffer.size;
@@ -457,7 +498,7 @@ int main(int argc, char* args[])
             SDL_UnlockAudioDevice(audio_device_id);
         }
 
-        render_offscreen_buffer(&buffered_texture);
+        render_offscreen_buffer(&game_render_buffer);
         SDL_RenderPresent(renderer);
         
         // Timing

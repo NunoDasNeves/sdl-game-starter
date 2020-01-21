@@ -18,7 +18,7 @@ struct GameState
     bool running;
 };
 
-struct SoundBuffer
+struct GameSoundBuffer
 {
     void* buffer;
     int buffer_size;
@@ -27,7 +27,7 @@ struct SoundBuffer
     int num_channels;
 };
 
-struct OffscreenBuffer
+struct GameRenderBuffer
 {
     void* pixels;
     int width;
@@ -96,9 +96,9 @@ struct GameMemory
     void* memory;
 };
 
-void init_game_memory(GameMemory game_memory);
+void game_init_memory(GameMemory game_memory);
 
-void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffer, OffscreenBuffer* offscreen_buffer, SoundBuffer* sound_buffer);
+void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffer, GameRenderBuffer* render_buffer, GameSoundBuffer* sound_buffer);
 
 
 #define GAME_STARTER_H

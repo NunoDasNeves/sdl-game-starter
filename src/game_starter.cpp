@@ -20,7 +20,7 @@ int clamp(int val, int lo, int hi) {
 }
 
 // return the modified new wave offset
-static void output_sine_wave(SoundBuffer* sound_buffer, int wave_hz, int wave_amplitude)
+static void output_sine_wave(GameSoundBuffer* sound_buffer, int wave_hz, int wave_amplitude)
 {
     static double t_sine = 0.0;
 
@@ -46,7 +46,7 @@ static void output_sine_wave(SoundBuffer* sound_buffer, int wave_hz, int wave_am
     }
 }
 
-static void render_gradient_to_buffer(OffscreenBuffer* buffer, int x_offset, int y_offset)
+static void render_gradient_to_buffer(GameRenderBuffer* buffer, int x_offset, int y_offset)
 {
     DEBUG_ASSERT(buffer->pixels);
 
@@ -81,7 +81,7 @@ static void render_gradient_to_buffer(OffscreenBuffer* buffer, int x_offset, int
     }
 }
 
-void init_game_memory(GameMemory game_memory)
+void game_init_memory(GameMemory game_memory)
 {
     DEBUG_ASSERT(game_memory.memory_size >= sizeof(GameState));
 
@@ -95,7 +95,7 @@ void init_game_memory(GameMemory game_memory)
     game_state->y_offset = 0;
 }
 
-void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffer, OffscreenBuffer* offscreen_buffer, SoundBuffer* sound_buffer)
+void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffer, GameRenderBuffer* render_buffer, GameSoundBuffer* sound_buffer)
 {
 
     GameState* game_state = (GameState*)game_memory.memory;
@@ -120,12 +120,12 @@ void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffe
     if (input_buffer->buffer[input_buffer->last].keyboard.up.pressed && \
         !input_buffer->buffer[(input_buffer->last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard.up.pressed)
     {
-        DEBUG_PRINTF("up key pressed\n");
+        //DEBUG_PRINTF("up key pressed\n");
     }
     if (!input_buffer->buffer[input_buffer->last].keyboard.up.pressed && \
         input_buffer->buffer[(input_buffer->last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard.up.pressed)
     {
-        DEBUG_PRINTF("up key released\n");
+        //DEBUG_PRINTF("up key released\n");
     }
 
     if (keyboard->up.pressed && !keyboard->down.pressed) {
@@ -160,7 +160,12 @@ void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffe
         }
         game_state->wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((double)MAX_VOLUME_OFFSET * left_stick_x);
     }
+    else
+    {
+        game_state->wave_hz = MIDDLE_C_FREQ;
+        game_state->wave_amplitude = MIDDLE_VOLUME_AMPLITUDE;
+    }
 
     output_sine_wave(sound_buffer, game_state->wave_hz, game_state->wave_amplitude);
-    render_gradient_to_buffer(offscreen_buffer, game_state->x_offset, game_state->y_offset);
+    render_gradient_to_buffer(render_buffer, game_state->x_offset, game_state->y_offset);
 }
