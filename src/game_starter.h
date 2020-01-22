@@ -9,6 +9,7 @@
 #define INPUT_BUFFER_SIZE 2
 #define MAX_CONTROLLERS 4
 
+// TODO make internal to the game - platform doesn't need to know about this
 struct GameState
 {
     int wave_hz;
@@ -90,20 +91,37 @@ struct GameInputBuffer
     GameInput buffer[INPUT_BUFFER_SIZE];
 };
 
+
+// debug/prototyping functions only
+#define FUNC_DEBUG_PLATFORM_READ_ENTIRE_FILE(name) void* name(const char* filename, int64_t* returned_size)
+typedef FUNC_DEBUG_PLATFORM_READ_ENTIRE_FILE(DEBUGPlatformReadEntireFile);
+
+#define FUNC_DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(void* memory)
+typedef FUNC_DEBUG_PLATFORM_FREE_FILE_MEMORY(DEBUGPlatformFreeFileMemory);
+
+#define FUNC_DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) void name(const char* filename, void* buffer, uint32_t len)
+typedef FUNC_DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUGPlatformWriteEntireFile);
+//
+
+
 struct GameMemory
 {
     unsigned memory_size;
     void* memory;
+
+    DEBUGPlatformReadEntireFile* DEBUG_platform_read_entire_file;
+    DEBUGPlatformFreeFileMemory* DEBUG_platform_free_file_memory;
+    DEBUGPlatformWriteEntireFile* DEBUG_platform_write_entire_file;
 };
 
-// debug/prototyping functions only
-void* DEBUG_platform_read_entire_file(const char* filename, int64_t* returned_size);
-void DEBUG_platform_free_file_memory(void* memory);
-void DEBUG_platform_write_entire_file(const char* filename, void* buffer, uint32_t len);
+#define FUNC_GAME_INIT_MEMORY(name) void name(GameMemory game_memory)
+typedef FUNC_GAME_INIT_MEMORY(GameInitMemory);
+//FUNC_GAME_INIT_MEMORY(game_init_memory_stub){}
 
-void game_init_memory(GameMemory game_memory);
+#define FUNC_GAME_UPDATE_AND_RENDER(name) void name(GameMemory game_memory, GameInputBuffer* input_buffer, GameRenderBuffer* render_buffer, GameSoundBuffer* sound_buffer)
+typedef FUNC_GAME_UPDATE_AND_RENDER(GameUpdateAndRender);
+//FUNC_GAME_UPDATE_AND_RENDER(game_update_and_render_stub){}
 
-void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffer, GameRenderBuffer* render_buffer, GameSoundBuffer* sound_buffer);
 
 #define GAME_STARTER_H
 #endif

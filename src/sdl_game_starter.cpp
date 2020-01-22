@@ -10,13 +10,14 @@
 
 #include"game_starter.h"
 
-// large alloc and free
 #ifdef _WIN32
+#define GAME_CODE_OBJECT_FILE "game_starter.dll"
 #define LARGE_ALLOC(SZ) VirtualAlloc(NULL, SZ, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
 #define LARGE_ALLOC_FIXED(SZ, ADDR) VirtualAlloc((LPVOID)ADDR, SZ, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
 #define LARGE_FREE(PTR,SZ) DEBUG_ASSERT(VirtualFree(PTR, 0, MEM_RELEASE))
 #endif
 #ifdef __linux__
+#define GAME_CODE_OBJECT_FILE "game_starter.so"
 #define LARGE_ALLOC(X) mmap(NULL, X, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0)
 // TODO fixed alloc on linux
 #define LARGE_ALLOC_FIXED(SZ, ADDR) LARGE_ALLOC(SZ)
@@ -30,6 +31,13 @@ struct AudioRingBuffer
     int play_index;
     void* data;
 };
+
+struct GameCode
+{
+    void* object;
+    GameInitMemory* init_memory;
+    GameUpdateAndRender* update_and_render;
+} game_code;
 
 static bool running = true;
 
@@ -80,7 +88,7 @@ static GameSoundBuffer game_sound_buffer{};
 static GameMemory game_memory{};
 
 
-void* DEBUG_platform_read_entire_file(const char* filename, int64_t* returned_size)
+static FUNC_DEBUG_PLATFORM_READ_ENTIRE_FILE(DEBUG_platform_read_entire_file)
 {
     SDL_RWops* file = SDL_RWFromFile(filename, "rb");
     DEBUG_ASSERT_MSG(file, "SDL Error: %s\n", SDL_GetError());
@@ -108,12 +116,12 @@ void* DEBUG_platform_read_entire_file(const char* filename, int64_t* returned_si
     return buffer;
 }
 
-void DEBUG_platform_free_file_memory(void* memory)
+static FUNC_DEBUG_PLATFORM_FREE_FILE_MEMORY(DEBUG_platform_free_file_memory)
 {
     free(memory);
 }
 
-void DEBUG_platform_write_entire_file(const char* filename, void* buffer, uint32_t len)
+static FUNC_DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUG_platform_write_entire_file)
 {
     SDL_RWops* file = SDL_RWFromFile(filename, "wb");
     DEBUG_ASSERT_MSG(file, "SDL Error: %s\n", SDL_GetError());
@@ -124,6 +132,33 @@ void DEBUG_platform_write_entire_file(const char* filename, void* buffer, uint32
     if (SDL_RWclose(file))
     {
         FATAL_PRINTF("SDL Error: %s\n", SDL_GetError());
+    }
+
+}
+
+static void load_game_code()
+{
+    if (game_code.object)
+    {
+        SDL_UnloadObject(game_code.object);
+        game_code = GameCode{};
+    }
+
+    game_code.object = SDL_LoadObject(GAME_CODE_OBJECT_FILE);
+    if (!game_code.object)
+    {
+        FATAL_PRINTF("%s\n", SDL_GetError());
+    }
+
+    game_code.init_memory = (GameInitMemory*) SDL_LoadFunction(game_code.object, "game_init_memory");
+    if (!game_code.init_memory)
+    {
+        FATAL_PRINTF("%s\n", SDL_GetError());
+    }
+    game_code.update_and_render = (GameUpdateAndRender*) SDL_LoadFunction(game_code.object, "game_update_and_render");
+    if (!game_code.update_and_render)
+    {
+        FATAL_PRINTF("%s\n", SDL_GetError());
     }
 
 }
@@ -457,7 +492,9 @@ int main(int argc, char* args[])
     // Unlock the callback
     SDL_UnlockAudioDevice(audio_device_id);
 
-    // Initialize game state, sound, input
+    // Initialize game code, memory, sound, input
+    load_game_code();
+
     game_memory.memory_size = GIBIBYTES(1);
 #ifdef FIXED_GAME_MEMORY
     game_memory.memory = LARGE_ALLOC_FIXED(game_memory.memory_size, TEBIBYTES(2));
@@ -469,7 +506,11 @@ int main(int argc, char* args[])
     {
         FATAL_PRINTF("Couldn't allocate game memory\n");
     }
-    game_init_memory(game_memory);
+    game_memory.DEBUG_platform_read_entire_file = DEBUG_platform_read_entire_file;
+    game_memory.DEBUG_platform_free_file_memory = DEBUG_platform_free_file_memory;
+    game_memory.DEBUG_platform_write_entire_file = DEBUG_platform_write_entire_file;
+
+    game_code.init_memory(game_memory);
 
     game_sound_buffer.buffer_size = AUDIO_SAMPLES_PER_SECOND * BYTES_PER_AUDIO_SAMPLE;
     game_sound_buffer.buffer = LARGE_ALLOC(game_sound_buffer.buffer_size);
@@ -587,7 +628,7 @@ int main(int argc, char* args[])
         //DEBUG_PRINTF("game sound buffer samples size %d\n", game_sound_buffer.buffer_size / BYTES_PER_AUDIO_SAMPLE);
 
         // Call the game code
-        game_update_and_render(game_memory, &game_input_buffer, &game_render_buffer, &game_sound_buffer);
+        game_code.update_and_render(game_memory, &game_input_buffer, &game_render_buffer, &game_sound_buffer);
 
         // Write audio data to the ring buffer
         SDL_LockAudioDevice(audio_device_id);

@@ -84,7 +84,7 @@ static void render_gradient_to_buffer(GameRenderBuffer* buffer, int x_offset, in
     }
 }
 
-void game_init_memory(GameMemory game_memory)
+extern "C" FUNC_GAME_INIT_MEMORY(game_init_memory)
 {
     DEBUG_ASSERT(game_memory.memory_size >= sizeof(GameState));
 
@@ -98,7 +98,7 @@ void game_init_memory(GameMemory game_memory)
     game_state->y_offset = 0;
 }
 
-void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffer, GameRenderBuffer* render_buffer, GameSoundBuffer* sound_buffer)
+extern "C" FUNC_GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
 
     GameState* game_state = (GameState*)game_memory.memory;
@@ -164,16 +164,16 @@ void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffe
         // test debug IO
         if (controller->a.pressed)
         {
-            DEBUG_platform_write_entire_file("test_file", (void*)"testIO\0", 7);
+            game_memory.DEBUG_platform_write_entire_file("test_file", (void*)"testIO\0", 7);
             DEBUG_PRINTF("wrote a file called \"test_file\"\n");
         }
         if (controller->b.pressed)
         {
             int64_t size;
-            void* buf = DEBUG_platform_read_entire_file("test_file", &size);
+            void* buf = game_memory.DEBUG_platform_read_entire_file("test_file", &size);
             DEBUG_ASSERT(size == 7);
             DEBUG_PRINTF("read a file containing \"%s\"\n", (char*)buf);
-            DEBUG_platform_free_file_memory(buf);
+            game_memory.DEBUG_platform_free_file_memory(buf);
         }
     }
     else
