@@ -1,7 +1,10 @@
 #include"game_starter.h"
 
 // TODO define this in our own math library
+// TODO redefined on linux, not on windows...hmm
+#ifndef M_PI
 #define M_PI 3.14159265359
+#endif
 
 #define MIDDLE_C_FREQ 256
 #define MIDDLE_VOLUME_AMPLITUDE 500

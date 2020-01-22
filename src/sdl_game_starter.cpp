@@ -74,14 +74,13 @@ static int num_controllers = 0;
 static SDL_GameController* controller_handles[MAX_CONTROLLERS];
 
 // Stuff passed to game
+static GameInputBuffer game_input_buffer{};
 static GameRenderBuffer game_render_buffer{};
 static GameSoundBuffer game_sound_buffer{};
 static GameMemory game_memory{};
-static GameInputBuffer game_input_buffer{};
 
 
-
-void* DEBUG_platform_read_entire_file(char* filename, int64_t* returned_size)
+void* DEBUG_platform_read_entire_file(const char* filename, int64_t* returned_size)
 {
     SDL_RWops* file = SDL_RWFromFile(filename, "rb");
     DEBUG_ASSERT_MSG(file, "SDL Error: %s\n", SDL_GetError());
@@ -96,7 +95,7 @@ void* DEBUG_platform_read_entire_file(char* filename, int64_t* returned_size)
     DEBUG_ASSERT_MSG(len >= 0, "%s\n", SDL_GetError());
     if (len != 1)
     {
-        FATAL_PRINTF("Read less than expected: read %llu, expected 1\n", len);
+        FATAL_PRINTF("Read less than expected: read %ld, expected 1\n", len);
     }
 
     if (SDL_RWclose(file))
@@ -114,13 +113,13 @@ void DEBUG_platform_free_file_memory(void* memory)
     free(memory);
 }
 
-void DEBUG_platform_write_entire_file(char* filename, void* buffer, uint32_t len)
+void DEBUG_platform_write_entire_file(const char* filename, void* buffer, uint32_t len)
 {
     SDL_RWops* file = SDL_RWFromFile(filename, "wb");
     DEBUG_ASSERT_MSG(file, "SDL Error: %s\n", SDL_GetError());
 
     int64_t written = SDL_RWwrite(file, buffer, len, 1);
-    DEBUG_ASSERT_MSG(written == 1, "Wrote %llu, SDL Error: %s\n", written, SDL_GetError());
+    DEBUG_ASSERT_MSG(written == 1, "Wrote %ld, SDL Error: %s\n", written, SDL_GetError());
 
     if (SDL_RWclose(file))
     {

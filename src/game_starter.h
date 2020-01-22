@@ -97,14 +97,13 @@ struct GameMemory
 };
 
 // debug/prototyping functions only
-void* DEBUG_platform_read_entire_file(char* filename, int64_t* returned_size);
+void* DEBUG_platform_read_entire_file(const char* filename, int64_t* returned_size);
 void DEBUG_platform_free_file_memory(void* memory);
-void DEBUG_platform_write_entire_file(char* filename, void* buffer, uint32_t len);
+void DEBUG_platform_write_entire_file(const char* filename, void* buffer, uint32_t len);
 
 void game_init_memory(GameMemory game_memory);
 
 void game_update_and_render(GameMemory game_memory, GameInputBuffer* input_buffer, GameRenderBuffer* render_buffer, GameSoundBuffer* sound_buffer);
-
 
 #define GAME_STARTER_H
 #endif
