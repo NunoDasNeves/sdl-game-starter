@@ -28,10 +28,11 @@ Run build.sh.
 - Linux build script
 - SDL initialization and window creation
 - Software rendering in dummy game loop
-- Sound initialization and debugging
+- Sound initialization and debug sine wave
 - Basic frame rate enforcement pattern
 - Basic input capture from keyboard and controller
 - Dummy game state
+- Debug IO for loading/saving files
 
 ## Roadmap
 - Mouse input
