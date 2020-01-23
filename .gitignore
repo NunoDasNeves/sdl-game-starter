@@ -3,4 +3,5 @@ build
 *.exe
 *.dll
 .vscode
-sdl-game-starter
+sdl_game_starter
+*.so

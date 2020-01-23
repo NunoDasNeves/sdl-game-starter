@@ -93,13 +93,13 @@ struct GameInputBuffer
 
 
 // debug/prototyping functions only
-#define FUNC_DEBUG_PLATFORM_READ_ENTIRE_FILE(name) void* name(const char* filename, int64_t* returned_size)
+#define FUNC_DEBUG_PLATFORM_READ_ENTIRE_FILE(name) void* name(const char* filename, int32_t* returned_size)
 typedef FUNC_DEBUG_PLATFORM_READ_ENTIRE_FILE(DEBUGPlatformReadEntireFile);
 
 #define FUNC_DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(void* memory)
 typedef FUNC_DEBUG_PLATFORM_FREE_FILE_MEMORY(DEBUGPlatformFreeFileMemory);
 
-#define FUNC_DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) void name(const char* filename, void* buffer, uint32_t len)
+#define FUNC_DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) void name(const char* filename, void* buffer, int32_t len)
 typedef FUNC_DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUGPlatformWriteEntireFile);
 //
 
@@ -116,11 +116,17 @@ struct GameMemory
 
 #define FUNC_GAME_INIT_MEMORY(name) void name(GameMemory game_memory)
 typedef FUNC_GAME_INIT_MEMORY(GameInitMemory);
-//FUNC_GAME_INIT_MEMORY(game_init_memory_stub){}
+FUNC_GAME_INIT_MEMORY(game_init_memory_stub)
+{
+    FATAL_PRINTF("game_init_memory not loaded\n");
+}
 
 #define FUNC_GAME_UPDATE_AND_RENDER(name) void name(GameMemory game_memory, GameInputBuffer* input_buffer, GameRenderBuffer* render_buffer, GameSoundBuffer* sound_buffer)
 typedef FUNC_GAME_UPDATE_AND_RENDER(GameUpdateAndRender);
-//FUNC_GAME_UPDATE_AND_RENDER(game_update_and_render_stub){}
+FUNC_GAME_UPDATE_AND_RENDER(game_update_and_render_stub)
+{
+    FATAL_PRINTF("game_update_and_render not loaded\n");
+}
 
 
 #define GAME_STARTER_H

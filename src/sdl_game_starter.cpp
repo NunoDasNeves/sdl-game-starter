@@ -8,6 +8,10 @@
 #include<sys/mman.h>
 #endif
 
+// TODO think more about what C++ to limit this to
+// NOTE only used for debugging (live code loading) right now
+#include <string>
+
 #include"game_starter.h"
 
 #ifdef _WIN32
@@ -37,9 +41,13 @@ struct GameCode
     void* object;
     GameInitMemory* init_memory;
     GameUpdateAndRender* update_and_render;
-} game_code;
+};
 
 static bool running = true;
+static bool do_load_game_code = false;
+
+char* executable_path = NULL;
+
 
 // Rendering stuff
 static SDL_Window* window = NULL;
@@ -82,10 +90,15 @@ static int num_controllers = 0;
 static SDL_GameController* controller_handles[MAX_CONTROLLERS];
 
 // Stuff passed to game
+static GameCode game_code{
+    NULL,
+    game_init_memory_stub,
+    game_update_and_render_stub
+};
+static GameMemory game_memory{};
 static GameInputBuffer game_input_buffer{};
 static GameRenderBuffer game_render_buffer{};
 static GameSoundBuffer game_sound_buffer{};
-static GameMemory game_memory{};
 
 
 static FUNC_DEBUG_PLATFORM_READ_ENTIRE_FILE(DEBUG_platform_read_entire_file)
@@ -144,7 +157,18 @@ static void load_game_code()
         game_code = GameCode{};
     }
 
-    game_code.object = SDL_LoadObject(GAME_CODE_OBJECT_FILE);
+    // Copy dll so it can be rebuilt at runtime
+
+    // Paths
+    std::string path = std::string(executable_path) + std::string(GAME_CODE_OBJECT_FILE);
+    std::string copied_path = std::string(executable_path) + std::string("_" GAME_CODE_OBJECT_FILE);
+
+    int32_t size;
+    void * data = DEBUG_platform_read_entire_file(path.c_str(), &size);
+    DEBUG_platform_write_entire_file(copied_path.c_str(), data, (int32_t)size);
+    DEBUG_platform_free_file_memory(data);
+
+    game_code.object = SDL_LoadObject(copied_path.c_str());
     if (!game_code.object)
     {
         FATAL_PRINTF("%s\n", SDL_GetError());
@@ -161,6 +185,7 @@ static void load_game_code()
         FATAL_PRINTF("%s\n", SDL_GetError());
     }
 
+    DEBUG_PRINTF("Reloaded game code\n");
 }
 
 static void render_offscreen_buffer(GameRenderBuffer* b)
@@ -290,6 +315,9 @@ static void handle_event(SDL_Event* e)
                 case SDLK_s:
                     keyboard->down.pressed = key_state;
                     break;
+                case SDLK_r:
+                    do_load_game_code = true;
+                    break;
             }
             /*
             DEBUG_PRINTF("up: %s\n", game_keyboard_state.up ? "DOWN" : "UP");
@@ -378,6 +406,12 @@ int main(int argc, char* args[])
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_AUDIO) < 0)
     {
         FATAL_PRINTF("SDL couldn't be initialized - SDL_Error: %s\n", SDL_GetError());
+    }
+
+    // Get the path we're running in
+    executable_path = SDL_GetBasePath();
+    if (!executable_path) {
+        executable_path = SDL_strdup("./");
     }
 
     // Create Window and Renderer
@@ -492,7 +526,7 @@ int main(int argc, char* args[])
     // Unlock the callback
     SDL_UnlockAudioDevice(audio_device_id);
 
-    // Initialize game code, memory, sound, input
+    // Initialize code, memory, sound, input
     load_game_code();
 
     game_memory.memory_size = GIBIBYTES(1);
@@ -558,6 +592,13 @@ int main(int argc, char* args[])
             handle_event(&e);
         }
         poll_controllers();
+
+        // Reload the game code if we want to
+        if (do_load_game_code)
+        {
+            load_game_code();
+            do_load_game_code = false;
+        }
 
         // Rendering and audio
         SDL_SetRenderDrawColor(renderer, 0x50, 0x00, 0x50, 0xFF);

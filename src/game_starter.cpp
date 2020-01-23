@@ -1,7 +1,7 @@
 #include"game_starter.h"
 
 // TODO define this in our own math library
-// TODO redefined on linux, not on windows...hmm
+// TODO warning redefined on linux, not on windows...hmm
 #ifndef M_PI
 #define M_PI 3.14159265359
 #endif
@@ -169,7 +169,7 @@ extern "C" FUNC_GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
         if (controller->b.pressed)
         {
-            int64_t size;
+            int32_t size;
             void* buf = game_memory.DEBUG_platform_read_entire_file("test_file", &size);
             DEBUG_ASSERT(size == 7);
             DEBUG_PRINTF("read a file containing \"%s\"\n", (char*)buf);
