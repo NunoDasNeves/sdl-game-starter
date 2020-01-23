@@ -33,11 +33,11 @@ Run build.sh.
 - Basic input capture from keyboard and controller
 - Dummy game state
 - Debug IO for loading/saving files
+- Compile game code as a dynamically loaded library for iterating at runtime
 
 ## Roadmap
-- Mouse input
 - Unified input map
-- Debugging stuff
+- Mouse input
 - Timer helpers for profiling game code
 - Save game/user data locations
 - Asset loading
@@ -45,8 +45,7 @@ Run build.sh.
 - Cursor visibility
 
 ## Possible
-- Compile game code as a dynamically loaded library for iterating at runtime
-- Variable framerate support (adjust depending on platform performance)
 - Active window detection
-- May add 32 bit support
+- Variable framerate support (adjust depending on platform performance)
 - May add Mac support
+- May add 32 bit support
