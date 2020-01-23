@@ -1,7 +1,3 @@
-Clean up - math.h inclusion - needs to link with libm on linux, no need to redefine pi
-Clean up - decide about macros vs const - should use const more
-Clean up - globals etc in platform code - most can be on the stack
-Replace asserts with SDL_Assert
 Add missing controller buttons to input
 Think about platform independent mouse input (deliver x, y each frame? poll during the frame?)
 Unify keyboard and controller input (this is game-dependent, but can cover a few cases in this repo)

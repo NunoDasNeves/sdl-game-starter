@@ -5,10 +5,10 @@
  * This file is used by the platform executable and game shared object library.
  */
 
-#include"global_includes.h"
+#include"util.h"
 
-#define INPUT_BUFFER_SIZE 2
-#define MAX_CONTROLLERS 4
+static const int INPUT_BUFFER_SIZE = 2;
+static const int MAX_CONTROLLERS = 4;
 
 struct GameSoundBuffer
 {

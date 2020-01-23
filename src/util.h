@@ -1,18 +1,22 @@
+/*
+ * General purpose macros and c library includes
+ */
 #ifndef GLOBAL_INCLUDES_H
 
-#include<stdio.h>
 #include<stdlib.h>
 #include<stdint.h>
-
-// TODO: own assert, own math libraries
-#include<assert.h>
+#include<limits.h>
 #include<math.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
+static_assert(CHAR_BIT == 8, "Char must be 8 bits");
 
-#define sizeofarray(arr) (sizeof(arr) / sizeof((arr)[0]))
+#define SIZE_OF_ARRAY(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-// distance between a 'prev' and 'curr' index in a ring buffer
+// distance between two indices 'prev' and 'curr' index in a ring buffer
 #define DIST_IN_RING_BUFFER(prev, curr, size) (((prev) > (curr) ? (curr) + (size) : (curr)) - (prev))
 
 #define MAX(X, Y) ((X) >= (Y) ? (X) : (Y))
@@ -28,10 +32,17 @@
 #define GIBIBYTES(X) (MEBIBYTES((uint64_t)X) * 1024)
 #define TEBIBYTES(X) (GIBIBYTES((uint64_t)X) * 1024)
 
-// TODO put these kind of defines in a header unless platform-specific
+
+// Debug stuff
+
+#include<stdio.h>
+#include<assert.h>
 #ifdef STDOUT_DEBUG
+
 #define DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__)
+
 #define DEBUG_ASSERT(E) assert(E)
+
 #define DEBUG_ASSERT_MSG(E, ...)            \
 do                                          \
 {                                           \
@@ -41,11 +52,6 @@ do                                          \
     }                                       \
     assert(E);                              \
 } while(false)
-#else
-#define DEBUG_PRINTF(...)
-#define DEBUG_ASSERT(E)
-#define DEBUG_ASSERT_MSG(E, S, ...)
-#endif
 
 #define FATAL_PRINTF(...)               \
     do                                  \
@@ -53,6 +59,19 @@ do                                          \
         fprintf(stderr, __VA_ARGS__);   \
         exit(1);                        \
     } while(false)
+
+
+#else
+
+// TODO figure out how to minimize these
+// TODO make them do something useful when debug not enabled?
+#define DEBUG_PRINTF(...)
+#define DEBUG_ASSERT(E)
+#define DEBUG_ASSERT_MSG(E, S, ...)
+#define FATAL_PRINTF(...)
+
+#endif
+
 
 #define GLOBAL_INCLUDES_H
 #endif

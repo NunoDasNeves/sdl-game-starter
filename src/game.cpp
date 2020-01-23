@@ -4,18 +4,12 @@
 #include"GameState.h"
 #include"game_platform_interface.h"
 
-// TODO define this in our own math library
-// TODO warning redefined on linux, not on windows...hmm
-#ifndef M_PI
-#define M_PI 3.14159265359
-#endif
-
-#define MIDDLE_C_FREQ 256
-#define MIDDLE_VOLUME_AMPLITUDE 500
+const int MIDDLE_C_FREQ = 256;
+const int MIDDLE_VOLUME_AMPLITUDE = 500;
 
 const int MAX_SCROLL_SPEED = 5;
 const int MIN_HZ = 20;
-const int MAX_HZ = 256*2;
+const int MAX_HZ = 256 * 2;
 const int MAX_VOLUME_OFFSET = 300;
 
 

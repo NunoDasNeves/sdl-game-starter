@@ -14,8 +14,8 @@ static const int MAX_PATH_LENGTH = MAX_PATH;
 #else   // _WIN32
 
 #ifdef __linux__
-#include<SDL2/SDL.h>
 #include<sys/mman.h>
+#include<SDL2/SDL.h>
 
 #define GAME_CODE_OBJECT_FILE "game.so"
 #define LARGE_ALLOC(X) mmap(NULL, (X), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0)
@@ -27,9 +27,6 @@ static const int MAX_PATH_LENGTH = PATH_MAX;
 
 #endif // __linux__
 #endif // else _WIN32
-
-
-static_assert(CHAR_BIT == 8, "Char must be 8 bits");
 
 
 #include"game_platform_interface.h"
