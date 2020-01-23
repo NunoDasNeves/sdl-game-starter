@@ -1,7 +1,7 @@
 @echo off
 
-set EXE_NAME=sdl_game_starter.exe
-set DLL_NAME=game_starter.dll
+set EXE_NAME=sdl_main.exe
+set DLL_NAME=game.dll
 
 set SDL_DIR=C:\SDL2-2.0.10
 
@@ -48,8 +48,8 @@ IF EXIST %EXE_NAME% del %EXE_NAME%
 IF EXIST %DLL_NAME% del %DLL_NAME%
 
 :: Build platform executable
-cl ..\src\sdl_game_starter.cpp %PLATFORM_COMPILER_FLAGS% %ADDITIONAL_FLAGS% /link %PLATFORM_LINKER_FLAGS%
+cl ..\src\sdl_main.cpp %PLATFORM_COMPILER_FLAGS% %ADDITIONAL_FLAGS% /link %PLATFORM_LINKER_FLAGS%
 :: Build game code dll
-cl ..\src\game_starter.cpp %GAME_COMPILER_FLAGS% %ADDITIONAL_FLAGS% /link %GAME_LINKER_FLAGS%
+cl ..\src\game.cpp %GAME_COMPILER_FLAGS% %ADDITIONAL_FLAGS% /link %GAME_LINKER_FLAGS%
 
 cd ..

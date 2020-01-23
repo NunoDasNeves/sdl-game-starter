@@ -1,47 +1,13 @@
-#ifdef _WIN32
-#include<windows.h>
-#include<SDL.h>
-#include<memoryapi.h>
-#endif
-#ifdef __linux__
-#include<SDL2/SDL.h>
-#include<sys/mman.h>
-#endif
+/*
+ * This file contains the entry point for the SDL platform layer
+ */
 
-// TODO think more about what C++ to limit this to
+// TODO think more about what C++ to limit this project to
 // NOTE only used for debugging (live code loading) right now
-#include <string>
+#include<string>
 
-#include"game_starter.h"
+#include"sdl_main.h"
 
-#ifdef _WIN32
-#define GAME_CODE_OBJECT_FILE "game_starter.dll"
-#define LARGE_ALLOC(SZ) VirtualAlloc(NULL, SZ, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
-#define LARGE_ALLOC_FIXED(SZ, ADDR) VirtualAlloc((LPVOID)ADDR, SZ, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
-#define LARGE_FREE(PTR,SZ) DEBUG_ASSERT(VirtualFree(PTR, 0, MEM_RELEASE))
-#endif
-#ifdef __linux__
-#define GAME_CODE_OBJECT_FILE "game_starter.so"
-#define LARGE_ALLOC(X) mmap(NULL, X, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0)
-// TODO fixed alloc on linux
-#define LARGE_ALLOC_FIXED(SZ, ADDR) LARGE_ALLOC(SZ)
-#define LARGE_FREE(X,Y) munmap(X, Y)
-#endif
-
-struct AudioRingBuffer
-{
-    int size;
-    int write_index;
-    int play_index;
-    void* data;
-};
-
-struct GameCode
-{
-    void* object;
-    GameInitMemory* init_memory;
-    GameUpdateAndRender* update_and_render;
-};
 
 static bool running = true;
 static bool do_load_game_code = false;

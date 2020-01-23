@@ -1,23 +1,14 @@
 #ifndef GAME_STARTER_H
 /*
- *
- *
+ * This file contains interfaces used by the platform to call into game code,
+ * and interfaces for the game to call back to platform code
+ * This file is used by the platform executable and game shared object library.
  */
 
 #include"global_includes.h"
 
 #define INPUT_BUFFER_SIZE 2
 #define MAX_CONTROLLERS 4
-
-// TODO make internal to the game - platform doesn't need to know about this
-struct GameState
-{
-    int wave_hz;
-    int wave_amplitude;
-    int x_offset;
-    int y_offset;
-    bool running;
-};
 
 struct GameSoundBuffer
 {

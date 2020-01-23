@@ -1,4 +1,8 @@
-#include"game_starter.h"
+/* 
+ * This file contains the entry points for game code, called by the platform layer
+ */
+#include"GameState.h"
+#include"game_platform_interface.h"
 
 // TODO define this in our own math library
 // TODO warning redefined on linux, not on windows...hmm

@@ -1,5 +1,4 @@
-Clean up - define where rest of game code is going, separate from platform code
-Clean up - platform header file
+Fix windows compiler warnings hopefully without causing more linux warnings
 Clean up - math.h inclusion - needs to link with libm on linux, no need to redefine pi
 Clean up - decide about macros vs const - should use const more
 Clean up - globals etc in platform code - most can be on the stack
