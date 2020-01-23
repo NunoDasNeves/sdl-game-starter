@@ -1,0 +1,16 @@
+Clean up - define where rest of game code is going, separate from platform code
+Clean up - platform header file
+Clean up - math.h inclusion - needs to link with libm on linux, no need to redefine pi
+Clean up - decide about macros vs const - should use const more
+Clean up - globals etc in platform code - most can be on the stack
+Replace asserts with SDL_Assert
+Add missing controller buttons to input
+Think about platform independent mouse input (deliver x, y each frame? poll during the frame?)
+Unify keyboard and controller input (this is game-dependent, but can cover a few cases in this repo)
+Think about how other platforms may be added, whether to split windows/linux/etc into different files linked into the SDL layer
+Think about graphics layer and where it goes - openGL, software rendering etc
+Fullscreen and multiple monitor support
+Cursor visibility
+Active window detection
+Audio fallback - detect possible skip and fade out quickly?
+Variable framerate support (adjust depending on platform performance)

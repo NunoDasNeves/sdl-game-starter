@@ -36,16 +36,8 @@ Run build.sh.
 - Compile game code as a dynamically loaded library for iterating at runtime
 
 ## Roadmap
-- Unified input map
-- Mouse input
-- Timer helpers for profiling game code
-- Save game/user data locations
-- Asset loading
-- Fullscreen and multiple monitor support
-- Cursor visibility
+- See TODO.txt
 
 ## Possible
-- Active window detection
-- Variable framerate support (adjust depending on platform performance)
 - May add Mac support
 - May add 32 bit support
