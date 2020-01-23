@@ -3,13 +3,12 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<stdint.h>
-#include<limits.h>
 
 // TODO: own assert, own math libraries
 #include<assert.h>
 #include<math.h>
 
-static_assert(CHAR_BIT == 8, "Char must be 8 bits");
+
 
 #define sizeofarray(arr) (sizeof(arr) / sizeof((arr)[0]))
 

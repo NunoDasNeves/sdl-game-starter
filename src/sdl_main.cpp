@@ -2,17 +2,16 @@
  * This file contains the entry point for the SDL platform layer
  */
 
-// TODO think more about what C++ to limit this project to
-// NOTE only used for debugging (live code loading) right now
-#include<string>
-
 #include"sdl_main.h"
-
 
 static bool running = true;
 static bool do_load_game_code = false;
 
-char* executable_path = NULL;
+static char* executable_path;
+// TODO something something string handling, allocator for strings possibly...not sure
+// for now use these for fiddling with paths
+static char tmp_path_1[MAX_PATH_LENGTH];
+static char tmp_path_2[MAX_PATH_LENGTH];
 
 
 // Rendering stuff
@@ -82,7 +81,7 @@ static FUNC_DEBUG_PLATFORM_READ_ENTIRE_FILE(DEBUG_platform_read_entire_file)
     DEBUG_ASSERT_MSG(len >= 0, "%s\n", SDL_GetError());
     if (len != 1)
     {
-        FATAL_PRINTF("Read less than expected: read %ld, expected 1\n", len);
+        FATAL_PRINTF("Read less than expected: read %I64d, expected 1\n", len);
     }
 
     if (SDL_RWclose(file))
@@ -106,7 +105,7 @@ static FUNC_DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUG_platform_write_entire_file)
     DEBUG_ASSERT_MSG(file, "SDL Error: %s\n", SDL_GetError());
 
     int64_t written = SDL_RWwrite(file, buffer, len, 1);
-    DEBUG_ASSERT_MSG(written == 1, "Wrote %ld, SDL Error: %s\n", written, SDL_GetError());
+    DEBUG_ASSERT_MSG(written == 1, "Wrote %I64d, SDL Error: %s\n", written, SDL_GetError());
 
     if (SDL_RWclose(file))
     {
@@ -114,6 +113,7 @@ static FUNC_DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUG_platform_write_entire_file)
     }
 
 }
+
 
 static void load_game_code()
 {
@@ -125,16 +125,25 @@ static void load_game_code()
 
     // Copy dll so it can be rebuilt at runtime
 
-    // Paths
-    std::string path = std::string(executable_path) + std::string(GAME_CODE_OBJECT_FILE);
-    std::string copied_path = std::string(executable_path) + std::string("_" GAME_CODE_OBJECT_FILE);
+    // Make paths
+    uint64_t executable_path_len = strlen(executable_path);
+    DEBUG_ASSERT((executable_path_len + strlen(GAME_CODE_OBJECT_FILE) + 1) < MAX_PATH_LENGTH);
 
-    int32_t size;
-    void * data = DEBUG_platform_read_entire_file(path.c_str(), &size);
-    DEBUG_platform_write_entire_file(copied_path.c_str(), data, (int32_t)size);
+    char * obj_path = tmp_path_1;
+    char * obj_copy_path = tmp_path_2;
+    SDL_strlcpy(obj_path, executable_path, MAX_PATH_LENGTH);
+    SDL_strlcpy(obj_copy_path, executable_path, MAX_PATH_LENGTH);
+    SDL_strlcat(obj_path, GAME_CODE_OBJECT_FILE, MAX_PATH_LENGTH);
+    SDL_strlcat(obj_copy_path, "_" GAME_CODE_OBJECT_FILE, MAX_PATH_LENGTH);
+
+    // Do the copy
+    int64_t size;
+    void * data = DEBUG_platform_read_entire_file(obj_path, &size);
+    DEBUG_platform_write_entire_file(obj_copy_path, data, (int32_t)size);
     DEBUG_platform_free_file_memory(data);
 
-    game_code.object = SDL_LoadObject(copied_path.c_str());
+    // Load the code
+    game_code.object = SDL_LoadObject(obj_copy_path);
     if (!game_code.object)
     {
         FATAL_PRINTF("%s\n", SDL_GetError());

@@ -1,14 +1,15 @@
-#include"game_platform_interface.h"
+#include<limits.h>
 
 #ifdef _WIN32
 #include<windows.h>
 #include<SDL.h>
-#include<memoryapi.h>
 
 #define GAME_CODE_OBJECT_FILE "game.dll"
 #define LARGE_ALLOC(SZ) VirtualAlloc(NULL, (SZ), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
 #define LARGE_ALLOC_FIXED(SZ, ADDR) VirtualAlloc((LPVOID)(ADDR), (SZ), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
 #define LARGE_FREE(PTR,SZ) DEBUG_ASSERT(VirtualFree((PTR), 0, MEM_RELEASE))
+
+static const int MAX_PATH_LENGTH = MAX_PATH;
 
 #else   // _WIN32
 
@@ -22,9 +23,16 @@
 #define LARGE_ALLOC_FIXED(SZ, ADDR) LARGE_ALLOC(SZ)
 #define LARGE_FREE(X,Y) munmap((X), (Y))
 
+static const int MAX_PATH_LENGTH = PATH_MAX;
+
 #endif // __linux__
 #endif // else _WIN32
 
+
+static_assert(CHAR_BIT == 8, "Char must be 8 bits");
+
+
+#include"game_platform_interface.h"
 
 struct AudioRingBuffer
 {
