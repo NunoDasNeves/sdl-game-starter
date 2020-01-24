@@ -22,7 +22,7 @@ static const int BYTES_PER_PIXEL = 4;
 // TODO dynamic or adjustable
 static int target_framerate = 60;
 // TODO recompute based on framerate
-static double target_frame_ms = 1000.0/(double)target_framerate;
+static float target_frame_ms = 1000.0/(float)target_framerate;
 
 // Audio stuff
 // TODO BUG/weird issues - audio skips during some OS interactions; holding on window X, typing in search box...arg
@@ -691,7 +691,7 @@ int main(int argc, char* args[])
             int samples_since_last_frame_write_data = DIST_IN_RING_BUFFER(play_sample_write_data, new_play_sample_write_data, AUDIO_RING_BUFFER_SIZE_SAMPLES);
 
             // avg of this frame
-            double avg_this_frame = ((double)samples_since_last_frame_set_target + (double)samples_since_last_frame_write_data) / 2.0;
+            float avg_this_frame = ((float)samples_since_last_frame_set_target + (float)samples_since_last_frame_write_data) / 2.0;
             // exponentially weighted rolling average
             avg_samples_per_frame = (int)EXP_WEIGHTED_AVG(avg_samples_per_frame, SAMPLES_PER_FRAME_COUNT, avg_this_frame);
 
@@ -720,8 +720,8 @@ int main(int argc, char* args[])
         
         // Timing
         uint64_t frame_end_time = SDL_GetPerformanceCounter();
-        double frame_time_ms = 1000.0 * (double)(frame_end_time - frame_start_time)/(double)SDL_GetPerformanceFrequency();
-        double diff_ms = target_frame_ms - frame_time_ms;
+        float frame_time_ms = 1000.0 * (float)(frame_end_time - frame_start_time)/(float)SDL_GetPerformanceFrequency();
+        float diff_ms = target_frame_ms - frame_time_ms;
         int loops = 0;
         while (diff_ms > 0.0)
         {
@@ -730,7 +730,7 @@ int main(int argc, char* args[])
                 SDL_Delay((uint32_t)diff_ms);
             }
             frame_end_time = SDL_GetPerformanceCounter();
-            frame_time_ms = 1000.0 * (double)(frame_end_time - frame_start_time)/(double)SDL_GetPerformanceFrequency();
+            frame_time_ms = 1000.0 * (float)(frame_end_time - frame_start_time)/(float)SDL_GetPerformanceFrequency();
             diff_ms = target_frame_ms - frame_time_ms;
             loops++;
         }

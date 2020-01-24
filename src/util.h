@@ -21,7 +21,7 @@ static_assert(CHAR_BIT == 8, "Char must be 8 bits");
 
 #define MAX(X, Y) ((X) >= (Y) ? (X) : (Y))
 #define MIN(X, Y) ((X) <= (Y) ? (X) : (Y))
-#define EXP_WEIGHTED_AVG(avg, N, new_sample) (((double)(avg) - (double)(avg)/(double)(N)) + (double)(new_sample)/(double)(N))
+#define EXP_WEIGHTED_AVG(avg, N, new_sample) (((float)(avg) - (float)(avg)/(float)(N)) + (float)(new_sample)/(float)(N))
 
 #define BITS_PER_BYTE 8
 

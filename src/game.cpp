@@ -23,7 +23,7 @@ int clamp(int val, int lo, int hi) {
 // return the modified new wave offset
 static void output_sine_wave(GameSoundBuffer* sound_buffer, int wave_hz, int wave_amplitude)
 {
-    static double t_sine = 0.0;
+    static float t_sine = 0.0;
 
     DEBUG_ASSERT(sound_buffer->buffer_size % sound_buffer->bytes_per_sample == 0);
     // how many samples per full wave
@@ -31,7 +31,7 @@ static void output_sine_wave(GameSoundBuffer* sound_buffer, int wave_hz, int wav
     int num_samples = sound_buffer->buffer_size / sound_buffer->bytes_per_sample;
     // one sample's worth for this period
     // I DONT HAVE GREAT INTUITION ON THIS
-    double t_sine_inc = 2.0 * M_PI * 1.0 / (double)wave_period;
+    float t_sine_inc = 2.0 * M_PI * 1.0 / (float)wave_period;
 
     int16_t* curr_sample = (int16_t*)sound_buffer->buffer;
 
@@ -39,7 +39,7 @@ static void output_sine_wave(GameSoundBuffer* sound_buffer, int wave_hz, int wav
 
         for (int ch = 0; ch < sound_buffer->num_channels; ++ch)
         {
-            *curr_sample = (int16_t)((double)wave_amplitude * sin(t_sine));
+            *curr_sample = (int16_t)((float)wave_amplitude * sin(t_sine));
             curr_sample++;
         }
 
@@ -143,18 +143,18 @@ extern "C" FUNC_GAME_UPDATE_AND_RENDER(game_update_and_render)
     {
 
         // TODO replace with Vector2; this doesn't work properly because the vector length must be clamped, not x and y individually
-        x_vel = clamp((int)(controller->left_stick_x * (double)MAX_SCROLL_SPEED) + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
-        y_vel = clamp((int)(controller->left_stick_y * (double)MAX_SCROLL_SPEED) + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
+        x_vel = clamp((int)(controller->left_stick_x * (float)MAX_SCROLL_SPEED) + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
+        y_vel = clamp((int)(controller->left_stick_y * (float)MAX_SCROLL_SPEED) + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
         // change freq & volume of wave
         if (controller->left_stick_y >= 0.0)
         {
-            game_state->wave_hz = MIDDLE_C_FREQ + (int16_t)((double)MAX_HZ * controller->left_stick_y);
+            game_state->wave_hz = MIDDLE_C_FREQ + (int16_t)((float)MAX_HZ * controller->left_stick_y);
         }
         else if (controller->left_stick_y < 0)
         {
-            game_state->wave_hz = MIN_HZ + (int16_t)((double)(MIDDLE_C_FREQ - MIN_HZ) * ((controller->left_stick_y + 1.0)/2.0));
+            game_state->wave_hz = MIN_HZ + (int16_t)((float)(MIDDLE_C_FREQ - MIN_HZ) * ((controller->left_stick_y + 1.0)/2.0));
         }
-        game_state->wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((double)MAX_VOLUME_OFFSET * controller->left_stick_x);
+        game_state->wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((float)MAX_VOLUME_OFFSET * controller->left_stick_x);
 
         // test debug IO
         if (controller->a)
