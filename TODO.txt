@@ -7,5 +7,6 @@ Fullscreen and multiple monitor support
 Poll controller and mouse input in a separate thread at higher frequency (120hz+)
 Cursor visibility
 Active window detection
+Audio separate function to get sound from game - avoids some problems with current method, probably not too hard from game side
 Audio fallback - detect possible skip and fade out quickly?
 Variable framerate support (adjust depending on platform performance)

@@ -43,16 +43,6 @@ static_assert(CHAR_BIT == 8, "Char must be 8 bits");
 
 #define DEBUG_ASSERT(E) assert(E)
 
-#define DEBUG_ASSERT_MSG(E, ...)            \
-do                                          \
-{                                           \
-    if (!(E))                               \
-    {                                       \
-        fprintf(stderr, __VA_ARGS__);       \
-    }                                       \
-    assert(E);                              \
-} while(false)
-
 #define FATAL_PRINTF(...)               \
     do                                  \
     {                                   \
@@ -60,14 +50,12 @@ do                                          \
         exit(1);                        \
     } while(false)
 
-
 #else
 
 // TODO figure out how to minimize these
 // TODO make them do something useful when debug not enabled?
 #define DEBUG_PRINTF(...)
 #define DEBUG_ASSERT(E)
-#define DEBUG_ASSERT_MSG(E, S, ...)
 #define FATAL_PRINTF(...)
 
 #endif
