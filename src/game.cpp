@@ -118,54 +118,51 @@ extern "C" FUNC_GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
 
     // testing buffered input
-    if (input_buffer->buffer[input_buffer->last].keyboard.up.pressed && \
-        !input_buffer->buffer[(input_buffer->last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard.up.pressed)
+    if (input_buffer->buffer[input_buffer->last].keyboard.up && \
+        !input_buffer->buffer[(input_buffer->last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard.up)
     {
         //DEBUG_PRINTF("up key pressed\n");
     }
-    if (!input_buffer->buffer[input_buffer->last].keyboard.up.pressed && \
-        input_buffer->buffer[(input_buffer->last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard.up.pressed)
+    if (!input_buffer->buffer[input_buffer->last].keyboard.up && \
+        input_buffer->buffer[(input_buffer->last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard.up)
     {
         //DEBUG_PRINTF("up key released\n");
     }
 
-    if (keyboard->up.pressed && !keyboard->down.pressed) {
+    if (keyboard->up && !keyboard->down) {
         y_vel = -MAX_SCROLL_SPEED;
-    } else if (keyboard->down.pressed && !keyboard->up.pressed) {
+    } else if (keyboard->down && !keyboard->up) {
         y_vel = MAX_SCROLL_SPEED;
     }
-    if (keyboard->left.pressed && !keyboard->right.pressed) {
+    if (keyboard->left && !keyboard->right) {
         x_vel = -MAX_SCROLL_SPEED;
-    } else if (keyboard->right.pressed && !keyboard->left.pressed) {
+    } else if (keyboard->right && !keyboard->left) {
         x_vel = MAX_SCROLL_SPEED;
     }
     if (controller)
     {
-        // normalize values to approx [-1.0, 1.0]
-        double left_stick_y = (double)controller->left_stick_y.value / 32767.0;
-        double left_stick_x = (double)controller->left_stick_x.value / 32767.0;
 
         // TODO replace with Vector2; this doesn't work properly because the vector length must be clamped, not x and y individually
-        x_vel = clamp((int)(left_stick_x * (double)MAX_SCROLL_SPEED) + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
-        y_vel = clamp((int)(left_stick_y * (double)MAX_SCROLL_SPEED) + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
+        x_vel = clamp((int)(controller->left_stick_x * (double)MAX_SCROLL_SPEED) + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
+        y_vel = clamp((int)(controller->left_stick_y * (double)MAX_SCROLL_SPEED) + y_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
         // change freq & volume of wave
-        if (left_stick_y >= 0.0)
+        if (controller->left_stick_y >= 0.0)
         {
-            game_state->wave_hz = MIDDLE_C_FREQ + (int16_t)((double)MAX_HZ * left_stick_y);
+            game_state->wave_hz = MIDDLE_C_FREQ + (int16_t)((double)MAX_HZ * controller->left_stick_y);
         }
-        else if (controller->left_stick_y.value < 0)
+        else if (controller->left_stick_y < 0)
         {
-            game_state->wave_hz = MIN_HZ + (int16_t)((double)(MIDDLE_C_FREQ - MIN_HZ) * ((left_stick_y + 1.0)/2.0));
+            game_state->wave_hz = MIN_HZ + (int16_t)((double)(MIDDLE_C_FREQ - MIN_HZ) * ((controller->left_stick_y + 1.0)/2.0));
         }
-        game_state->wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((double)MAX_VOLUME_OFFSET * left_stick_x);
+        game_state->wave_amplitude = MIDDLE_VOLUME_AMPLITUDE + (int16_t)((double)MAX_VOLUME_OFFSET * controller->left_stick_x);
 
         // test debug IO
-        if (controller->a.pressed)
+        if (controller->a)
         {
             game_memory.DEBUG_platform_write_entire_file("test_file", (void*)"testIO\0", 7);
             DEBUG_PRINTF("wrote a file called \"test_file\"\n");
         }
-        if (controller->b.pressed)
+        if (controller->b)
         {
             int64_t size;
             void* buf = game_memory.DEBUG_platform_read_entire_file("test_file", &size);

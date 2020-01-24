@@ -27,40 +27,44 @@ struct GameRenderBuffer
     int pitch;
 };
 
-struct ButtonInput
-{
-    bool pressed;
-};
-
-struct AnalogInput
-{
-    int16_t value;
-};
-
 struct ControllerInput
 {
     bool plugged_in;
 
-    AnalogInput left_stick_x;
-    AnalogInput left_stick_y;
+    bool start;
+    bool back;
 
-    ButtonInput a;
-    ButtonInput b;
-    ButtonInput x;
-    ButtonInput y;
+    bool left_shoulder;
+    bool left_trigger; // interpreted as binary even if analog
+    bool left_stick;
+    // TODO might be more useful as a Vector2?
+    float left_stick_x;
+    float left_stick_y;
 
-    ButtonInput up;
-    ButtonInput down;
-    ButtonInput left;
-    ButtonInput right;
+    bool right_shoulder;
+    bool right_trigger; // interpreted as binary even if analog
+    bool right_stick;
+    // TODO might be more useful as a Vector2?
+    float right_stick_x;
+    float right_stick_y;
+
+    bool a;
+    bool b;
+    bool x;
+    bool y;
+
+    bool up;
+    bool down;
+    bool left;
+    bool right;
 };
 
 struct KeyboardInput
 {
-    ButtonInput up;
-    ButtonInput down;
-    ButtonInput left;
-    ButtonInput right;
+    bool up;
+    bool down;
+    bool left;
+    bool right;
 
     // etc; add keys as needed (or do this differently...)
 };

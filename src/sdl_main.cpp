@@ -276,19 +276,19 @@ static void handle_event(SDL_Event* e)
             {
                 case SDLK_LEFT:
                 case SDLK_a:
-                    keyboard->left.pressed = key_state;
+                    keyboard->left = key_state;
                     break;
                 case SDLK_UP:
                 case SDLK_w:
-                    keyboard->up.pressed = key_state;
+                    keyboard->up = key_state;
                     break;
                 case SDLK_RIGHT:
                 case SDLK_d:
-                    keyboard->right.pressed = key_state;
+                    keyboard->right = key_state;
                     break;
                 case SDLK_DOWN:
                 case SDLK_s:
-                    keyboard->down.pressed = key_state;
+                    keyboard->down = key_state;
                     break;
                 case SDLK_r:
                     do_load_game_code = true;
@@ -305,10 +305,24 @@ static void handle_event(SDL_Event* e)
     }
 }
 
+static inline float process_stick_input(int16_t input, int16_t deadzone)
+{
+    if (abs(input) < deadzone) return 0.0F;
+
+    if (input >= 0)
+    {
+        return ((float)input)/32767.0F;
+    }
+    return ((float)input)/32768.0F;
+    // TODO test this!
+}
+
 static void poll_controllers()
 {
     // TODO better deadzone handling, maybe adjustable
     static const int deadzone_left = 5000;
+    static const int deadzone_right = 5000;
+
     GameInput* game_input = &(game_input_buffer.buffer[game_input_buffer.last]);
     game_input->num_controllers = 0;
 
@@ -322,25 +336,32 @@ static void poll_controllers()
             game_input->num_controllers++;
             controller->plugged_in = true;
 
-            controller->up.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_UP);
-            controller->down.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_DOWN);
-            controller->left.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_LEFT);
-            controller->right.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
-            //= SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_START);
-            //= SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_BACK);
-            //= SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
-            //= SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
-            controller->a.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_A);
-            controller->b.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_B);
-            controller->x.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_X);
-            controller->y.pressed = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_Y);
+            controller->up = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_UP);
+            controller->down = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+            controller->left = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+            controller->right = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+            controller->start = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_START);
+            controller->back = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_BACK);
+            controller->left_shoulder = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+            controller->right_shoulder = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+            controller->a = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_A);
+            controller->b = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_B);
+            controller->x = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_X);
+            controller->y = SDL_GameControllerGetButton(controller_handles[i], SDL_CONTROLLER_BUTTON_Y);
 
-            int16_t stick_x = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_LEFTX);
-            int16_t stick_y = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_LEFTY);
-            stick_x = abs(stick_x) < deadzone_left ? 0 : stick_x;
-            stick_y = abs(stick_y) < deadzone_left ? 0 : stick_y;
-            controller->left_stick_x.value = stick_x;
-            controller->left_stick_y.value = stick_y;
+            int16_t left_trigger = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_TRIGGERLEFT);
+            int16_t left_stick_x = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_LEFTX);
+            int16_t left_stick_y = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_LEFTY);
+            controller->left_trigger = left_trigger > 16383 ? true : false;
+            controller->left_stick_x = process_stick_input(left_stick_x, deadzone_left);
+            controller->left_stick_y = process_stick_input(left_stick_y, deadzone_left);
+
+            int16_t right_trigger = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_TRIGGERRIGHT);
+            int16_t right_stick_x = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_RIGHTX);
+            int16_t right_stick_y = SDL_GameControllerGetAxis(controller_handles[i], SDL_CONTROLLER_AXIS_RIGHTY);
+            controller->right_trigger = right_trigger > 16383 ? true : false;
+            controller->right_stick_x = process_stick_input(right_stick_x, deadzone_right);
+            controller->right_stick_y = process_stick_input(right_stick_y, deadzone_right);
         }
         else
         {

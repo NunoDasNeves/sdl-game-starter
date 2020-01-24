@@ -1,9 +1,10 @@
-Add missing controller buttons to input
-Think about platform independent mouse input (deliver x, y each frame? poll during the frame?)
+Test new normalized gamepad analog input
+Think about platform independent mouse input
 Unify keyboard and controller input (this is game-dependent, but can cover a few cases in this repo)
 Think about how other platforms may be added, whether to split windows/linux/etc into different files linked into the SDL layer
 Think about graphics layer and where it goes - openGL, software rendering etc
 Fullscreen and multiple monitor support
+Poll controller and mouse input in a separate thread at higher frequency (120hz+)
 Cursor visibility
 Active window detection
 Audio fallback - detect possible skip and fade out quickly?
