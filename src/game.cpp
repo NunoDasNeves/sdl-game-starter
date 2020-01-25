@@ -23,7 +23,7 @@ int clamp(int val, int lo, int hi) {
 // return the modified new wave offset
 static void output_sine_wave(GameSoundBuffer* sound_buffer, int wave_hz, int wave_amplitude)
 {
-    static float t_sine = 0.0;
+    static float t_sine = 0.0F;
 
     DEBUG_ASSERT(sound_buffer->buffer_size % sound_buffer->bytes_per_sample == 0);
     // how many samples per full wave
@@ -31,7 +31,7 @@ static void output_sine_wave(GameSoundBuffer* sound_buffer, int wave_hz, int wav
     int num_samples = sound_buffer->buffer_size / sound_buffer->bytes_per_sample;
     // one sample's worth for this period
     // I DONT HAVE GREAT INTUITION ON THIS
-    float t_sine_inc = 2.0 * M_PI * 1.0 / (float)wave_period;
+    float t_sine_inc = 2.0F * (float)M_PI * 1.0F / (float)wave_period;
 
     int16_t* curr_sample = (int16_t*)sound_buffer->buffer;
 
@@ -98,14 +98,12 @@ extern "C" FUNC_GAME_INIT_MEMORY(game_init_memory)
 
 extern "C" FUNC_GAME_UPDATE_AND_RENDER(game_update_and_render)
 {
-
     GameState* game_state = (GameState*)game_memory.memory;
 
     int x_vel = 0;
     int y_vel = 0;
 
     GameInput* game_input = &(input_buffer->buffer[input_buffer->last]);
-    KeyboardInput* keyboard = &(game_input->keyboard);
     // find a plugged in controller
     ControllerInput* controller = NULL;
     for (int i = 0; i < MAX_CONTROLLERS; ++i)
@@ -117,30 +115,18 @@ extern "C" FUNC_GAME_UPDATE_AND_RENDER(game_update_and_render)
         }
     }
 
-    // testing buffered input
-    if (input_buffer->buffer[input_buffer->last].keyboard.up && \
-        !input_buffer->buffer[(input_buffer->last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard.up)
-    {
-        //DEBUG_PRINTF("up key pressed\n");
-    }
-    if (!input_buffer->buffer[input_buffer->last].keyboard.up && \
-        input_buffer->buffer[(input_buffer->last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard.up)
-    {
-        //DEBUG_PRINTF("up key released\n");
-    }
-
-    if (keyboard->up && !keyboard->down) {
-        y_vel = -MAX_SCROLL_SPEED;
-    } else if (keyboard->down && !keyboard->up) {
-        y_vel = MAX_SCROLL_SPEED;
-    }
-    if (keyboard->left && !keyboard->right) {
-        x_vel = -MAX_SCROLL_SPEED;
-    } else if (keyboard->right && !keyboard->left) {
-        x_vel = MAX_SCROLL_SPEED;
-    }
     if (controller)
     {
+        // turn analog input into left stick input
+        if (controller->is_keyboard)
+        {
+            controller->left_stick_x = 0;
+            controller->left_stick_y = 0;
+            controller->left_stick_x += (controller->right ? 1.0F : 0);
+            controller->left_stick_x += (controller->left ? -1.0F : 0);
+            controller->left_stick_y += (controller->up ? 1.0F : 0);
+            controller->left_stick_y += (controller->down ? -1.0F : 0);
+        }
 
         // TODO replace with Vector2; this doesn't work properly because the vector length must be clamped, not x and y individually
         x_vel = clamp((int)(controller->left_stick_x * (float)MAX_SCROLL_SPEED) + x_vel, -MAX_SCROLL_SPEED, MAX_SCROLL_SPEED);
@@ -173,6 +159,7 @@ extern "C" FUNC_GAME_UPDATE_AND_RENDER(game_update_and_render)
     }
     else
     {
+        DEBUG_PRINTF("No controllers detected!\n");
         game_state->wave_hz = MIDDLE_C_FREQ;
         game_state->wave_amplitude = MIDDLE_VOLUME_AMPLITUDE;
     }

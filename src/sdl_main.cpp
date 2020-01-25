@@ -22,7 +22,7 @@ static const int BYTES_PER_PIXEL = 4;
 // TODO dynamic or adjustable
 static int target_framerate = 60;
 // TODO recompute based on framerate
-static float target_frame_ms = 1000.0/(float)target_framerate;
+static float target_frame_ms = 1000.0F/(float)target_framerate;
 
 // Audio stuff
 // TODO BUG/weird issues - audio skips during some OS interactions; holding on window X, typing in search box...arg
@@ -51,8 +51,10 @@ static SDL_AudioSpec audio_settings;
 static AudioRingBuffer audio_ring_buffer{};
 
 // Input stuff
-static int num_controllers = 0;
-static SDL_GameController* controller_handles[MAX_CONTROLLERS];
+// indices in this array correspond to indices of ControllerInput structs in GameInput
+// the keyboard is the last index in the array (not in this array, only in ControllerInput)
+static const int MAX_GAMECONTROLLERS = MAX_CONTROLLERS - 1;
+static SDL_GameController* controller_handles[MAX_GAMECONTROLLERS];
 
 // Stuff passed to game
 static GameCode game_code{
@@ -195,21 +197,17 @@ static void add_controller(int joystick_index) {
     {
         return;
     }
-    if (num_controllers >= MAX_CONTROLLERS)
-    {
-        return;
-    }
+
     bool success = false;
     const char * error = "maximum number of controllers reached";
     // find empty slot
-    for (int i = 0; i < MAX_CONTROLLERS; ++i)
+    for (int i = 0; i < MAX_GAMECONTROLLERS; ++i)
     {
         if (!controller_handles[i])
         {
             controller_handles[i] = SDL_GameControllerOpen(joystick_index);
             if (controller_handles[i])
             {
-                num_controllers++;
                 success = true;
             }
             else
@@ -227,11 +225,7 @@ static void add_controller(int joystick_index) {
 }
 
 static void remove_controller(SDL_JoystickID joystick_id) {
-    if (num_controllers == 0)
-    {
-        return;
-    }
-    for (int i = 0; i < MAX_CONTROLLERS; ++i)
+    for (int i = 0; i < MAX_GAMECONTROLLERS; ++i)
     {
         if (controller_handles[i])
         {
@@ -240,7 +234,6 @@ static void remove_controller(SDL_JoystickID joystick_id) {
             {
                 SDL_GameControllerClose(controller_handles[i]);
                 controller_handles[i] = NULL;
-                num_controllers--;
             }
             break;
         }
@@ -281,42 +274,53 @@ static void handle_event(SDL_Event* e)
             remove_controller(e->cdevice.which);
             break;
         }
-        // TODO remove controller
-        // TODO support text input as per: https://wiki.libsdl.org/Tutorials/TextInput
         case SDL_KEYDOWN:
             key_state = true;
         case SDL_KEYUP:
         {
             SDL_Keycode keycode = e->key.keysym.sym;
-            KeyboardInput* keyboard = &(game_input_buffer.buffer[game_input_buffer.last].keyboard);
+            ControllerInput* controller = &(game_input_buffer.buffer[game_input_buffer.last].controllers[KEYBOARD_INDEX]);
+            // TODO make these remappable
             switch(keycode)
             {
                 case SDLK_LEFT:
                 case SDLK_a:
-                    keyboard->left = key_state;
+                    controller->left = key_state;
                     break;
                 case SDLK_UP:
                 case SDLK_w:
-                    keyboard->up = key_state;
+                    controller->up = key_state;
                     break;
                 case SDLK_RIGHT:
                 case SDLK_d:
-                    keyboard->right = key_state;
+                    controller->right = key_state;
                     break;
                 case SDLK_DOWN:
                 case SDLK_s:
-                    keyboard->down = key_state;
+                    controller->down = key_state;
+                    break;
+                case SDLK_q:
+                    controller->b = key_state;
+                    break;
+                case SDLK_e:
+                    controller->x = key_state;
                     break;
                 case SDLK_r:
+                    controller->y = key_state;
+                    break;
+                case SDLK_SPACE:
+                    controller->a = key_state;
+                    break;
+                case SDLK_ESCAPE:
+                    controller->start = key_state;
+                    break;
+                case SDLK_BACKSPACE:
+                    controller->back = key_state;
+                    break;
+                case SDLK_k:
                     do_load_game_code = true;
                     break;
             }
-            /*
-            DEBUG_PRINTF("up: %s\n", game_keyboard_state.up ? "DOWN" : "UP");
-            DEBUG_PRINTF("down: %s\n", game_keyboard_state.down ? "DOWN" : "UP");
-            DEBUG_PRINTF("left: %s\n", game_keyboard_state.left ? "DOWN" : "UP");
-            DEBUG_PRINTF("right: %s\n", game_keyboard_state.right ? "DOWN" : "UP");
-            */
             break;
         }
     }
@@ -341,9 +345,9 @@ static void poll_controllers()
     static const int deadzone_right = 5000;
 
     GameInput* game_input = &(game_input_buffer.buffer[game_input_buffer.last]);
-    game_input->num_controllers = 0;
+    game_input->num_controllers = 1; // keyboard
 
-    for (int i = 0; i < MAX_CONTROLLERS; ++i)
+    for (int i = 0; i < MAX_GAMECONTROLLERS; ++i)
     {
 
         ControllerInput* controller = &(game_input->controllers[i]);
@@ -447,15 +451,6 @@ int main(int argc, char* args[])
         FATAL_PRINTF("Renderer could not be created - SDL_Error: %s\n", SDL_GetError());
     }
 
-    // Get initially plugged in controllers
-
-    int num_joysticks = SDL_NumJoysticks();
-    for (int joy_index = 0; joy_index < num_joysticks; ++joy_index)
-    {
-        add_controller(joy_index);
-    }
-    DEBUG_PRINTF("Found %d game controllers\n", num_controllers);
-
     // Initialize rendering buffer
 
     game_render_buffer.pitch = width * BYTES_PER_PIXEL;
@@ -539,9 +534,10 @@ int main(int argc, char* args[])
     // Unlock the callback
     SDL_UnlockAudioDevice(audio_device_id);
 
-    // Initialize code, memory, sound, input
+    // init game code
     load_game_code();
 
+    // init game memory
     game_memory.memory_size = GIBIBYTES(1);
 #ifdef FIXED_GAME_MEMORY
     game_memory.memory = LARGE_ALLOC_FIXED(game_memory.memory_size, TEBIBYTES(2));
@@ -559,6 +555,7 @@ int main(int argc, char* args[])
 
     game_code.init_memory(game_memory);
 
+    // init game audio
     game_sound_buffer.buffer_size = AUDIO_SAMPLES_PER_SECOND * BYTES_PER_AUDIO_SAMPLE;
     game_sound_buffer.buffer = LARGE_ALLOC(game_sound_buffer.buffer_size);
     if (!game_sound_buffer.buffer)
@@ -569,7 +566,18 @@ int main(int argc, char* args[])
     game_sound_buffer.bytes_per_sample = BYTES_PER_AUDIO_SAMPLE;
     game_sound_buffer.num_channels = NUM_AUDIO_CHANNELS;
 
+    // init game input
     memset(&game_input_buffer, 0, sizeof(GameInputBuffer));
+    for (int i = 0; i < INPUT_BUFFER_SIZE; ++i)
+    {
+        game_input_buffer.buffer[i].controllers[KEYBOARD_INDEX].is_keyboard = true;
+        game_input_buffer.buffer[i].controllers[KEYBOARD_INDEX].plugged_in = true;
+    }
+    int num_joysticks = SDL_NumJoysticks();
+    for (int joy_index = 0; joy_index < num_joysticks; ++joy_index)
+    {
+        add_controller(joy_index);
+    }
 
     // Now do the game loop
     SDL_Event e;
@@ -597,8 +605,8 @@ int main(int argc, char* args[])
         game_input_buffer.last = (game_input_buffer.last + 1) % INPUT_BUFFER_SIZE;
         memset(&game_input_buffer.buffer[game_input_buffer.last], 0, sizeof(GameInput));
         // copy previous keyboard state (otherwise keys only fire on each keyboard event bounded by OS repeat rate)
-        game_input_buffer.buffer[game_input_buffer.last].keyboard = \
-            game_input_buffer.buffer[(game_input_buffer.last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].keyboard;
+        game_input_buffer.buffer[game_input_buffer.last].controllers[KEYBOARD_INDEX] = \
+            game_input_buffer.buffer[(game_input_buffer.last + INPUT_BUFFER_SIZE - 1) % INPUT_BUFFER_SIZE].controllers[KEYBOARD_INDEX];
         
         while (SDL_PollEvent(&e))
         {
@@ -691,7 +699,7 @@ int main(int argc, char* args[])
             int samples_since_last_frame_write_data = DIST_IN_RING_BUFFER(play_sample_write_data, new_play_sample_write_data, AUDIO_RING_BUFFER_SIZE_SAMPLES);
 
             // avg of this frame
-            float avg_this_frame = ((float)samples_since_last_frame_set_target + (float)samples_since_last_frame_write_data) / 2.0;
+            float avg_this_frame = ((float)samples_since_last_frame_set_target + (float)samples_since_last_frame_write_data) / 2.0F;
             // exponentially weighted rolling average
             avg_samples_per_frame = (int)EXP_WEIGHTED_AVG(avg_samples_per_frame, SAMPLES_PER_FRAME_COUNT, avg_this_frame);
 
@@ -720,17 +728,17 @@ int main(int argc, char* args[])
         
         // Timing
         uint64_t frame_end_time = SDL_GetPerformanceCounter();
-        float frame_time_ms = 1000.0 * (float)(frame_end_time - frame_start_time)/(float)SDL_GetPerformanceFrequency();
+        float frame_time_ms = 1000.0F * (float)(frame_end_time - frame_start_time)/(float)SDL_GetPerformanceFrequency();
         float diff_ms = target_frame_ms - frame_time_ms;
         int loops = 0;
-        while (diff_ms > 0.0)
+        while (diff_ms > 0.0F)
         {
-            if (diff_ms > 1.1)
+            if (diff_ms > 1.1F)
             {
                 SDL_Delay((uint32_t)diff_ms);
             }
             frame_end_time = SDL_GetPerformanceCounter();
-            frame_time_ms = 1000.0 * (float)(frame_end_time - frame_start_time)/(float)SDL_GetPerformanceFrequency();
+            frame_time_ms = 1000.0F * (float)(frame_end_time - frame_start_time)/(float)SDL_GetPerformanceFrequency();
             diff_ms = target_frame_ms - frame_time_ms;
             loops++;
         }

@@ -39,5 +39,6 @@ Run build.sh.
 - See TODO.txt
 
 ## Possible
-- May add Mac support
-- May add 32 bit support
+- Text input support as per: https://wiki.libsdl.org/Tutorials/TextInput
+- Mac support
+- 32 bit support
