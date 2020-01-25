@@ -1,9 +1,8 @@
-# Linux + Windows cross platform starting point for game development
+# Linux + Windows sdl layer for game development
 
-This isn't a library, it is a starting point for game projects.
+This isn't a library, it is a starting point for game projects; this layer is meant to evolve to suit the requirements of the game.
 
-It's meant to be a personal project, though it may be educational to read.
-Based (in part) on code from https://davidgow.net/handmadepenguin/, https://handmadehero.org/, http://lazyfoo.net/tutorials/SDL/index.php
+Based loosely on videos from [Handmade Hero](https://handmadehero.org/) and the Linux version, [Handmade Penguin](https://davidgow.net/handmadepenguin/).
 
 ## Build
 
@@ -13,13 +12,13 @@ Install Visual Studio build tools
 Install SDL 2.0.10 development libraries to C:\SDL2-2.0.10
 Copy SDL2.dll to repo (it has to be in the same directory as the executable)
 
-Run vcvarsall.bat to get cl in the PATH.
+Run vcvarsall.bat to get compiler in the PATH.
 
 Run build.bat.
 
 ### Linux
 
-Install g++ and SDL2
+Install g++ and SDL2 with your package manager.
 
 Run build.sh.
 
