@@ -1,4 +1,3 @@
-Test new normalized gamepad analog input
 Think about graphics layer and where it goes - openGL, software rendering etc
 Fullscreen and multiple monitor support
 Poll controller and mouse input in a separate thread at higher frequency (120hz+)

@@ -274,6 +274,22 @@ static void handle_event(SDL_Event* e)
             remove_controller(e->cdevice.which);
             break;
         }
+        case SDL_MOUSEBUTTONDOWN:
+            key_state = true;
+        case SDL_MOUSEBUTTONUP:
+        {
+            ControllerInput* controller = &(game_input_buffer.buffer[game_input_buffer.last].controllers[KEYBOARD_INDEX]);
+            switch(e->button.button)
+            {
+                case SDL_BUTTON_LEFT:
+                    controller->left_shoulder = key_state;
+                    break;
+                case SDL_BUTTON_RIGHT:
+                    controller->right_shoulder = key_state;
+                    break;
+            }
+            break;
+        }
         case SDL_KEYDOWN:
             key_state = true;
         case SDL_KEYUP:
@@ -336,6 +352,12 @@ static inline float process_stick_input(int16_t input, int16_t deadzone)
     }
     return ((float)input)/32768.0F;
     // TODO test this!
+}
+
+static void poll_mouse()
+{
+    GameInput* game_input = &(game_input_buffer.buffer[game_input_buffer.last]);
+    SDL_GetMouseState(&(game_input->mouse_x), &(game_input->mouse_y));
 }
 
 static void poll_controllers()
@@ -613,6 +635,7 @@ int main(int argc, char* args[])
             handle_event(&e);
         }
         poll_controllers();
+        poll_mouse();
 
         // Reload the game code if we want to
         if (do_load_game_code)
